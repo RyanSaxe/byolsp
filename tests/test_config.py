@@ -64,6 +64,25 @@ def test_local_config_round_trips(tmp_path: Path) -> None:
     assert load_local_config(tmp_path) == config
 
 
+def test_save_preserves_user_comments_and_unknown_keys(tmp_path: Path) -> None:
+    path = tmp_path / ".byolsp" / "local.yml"
+    path.parent.mkdir()
+    path.write_text(
+        "# personal overrides\n"
+        "version: 1\n"
+        "global:\n"
+        "  excluded_rule_ids: []\n"
+        "experimental: true\n"
+    )
+
+    save_local_config(tmp_path, LocalConfig(excluded_rule_ids=["no-python-cast"]))
+
+    content = path.read_text()
+    assert "# personal overrides" in content
+    assert "experimental: true" in content
+    assert "no-python-cast" in content
+
+
 def test_global_config_defaults_when_file_absent(tmp_path: Path) -> None:
     assert load_global_config(tmp_path) == GlobalConfig()
 

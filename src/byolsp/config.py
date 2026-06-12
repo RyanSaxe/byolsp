@@ -100,19 +100,22 @@ def load_repo_config(repo_root: Path) -> RepoConfig:
 
 
 def save_repo_config(repo_root: Path, config: RepoConfig) -> None:
-    data = CommentedMap()
+    path = repo_config_path(repo_root)
+    data = _load_or_new(path)
     data["version"] = CONFIG_VERSION
-    data["project"] = CommentedMap({"name": config.project_name})
-    data["paths"] = CommentedMap(
+    _update_section(data, "project", {"name": config.project_name})
+    _update_section(
+        data,
+        "paths",
         {
             "sgconfig": config.paths.sgconfig,
             "project_rules": config.paths.project_rules,
             "personal_local_rules": config.paths.personal_local_rules,
             "personal_global_rules": config.paths.personal_global_rules,
-        }
+        },
     )
-    data["ai"] = CommentedMap({"agents": list(config.agents)})
-    write_yaml_atomic(repo_config_path(repo_root), data)
+    _update_section(data, "ai", {"agents": list(config.agents)})
+    write_yaml_atomic(path, data)
 
 
 def load_local_config(repo_root: Path) -> LocalConfig:
@@ -129,10 +132,13 @@ def load_local_config(repo_root: Path) -> LocalConfig:
 
 
 def save_local_config(repo_root: Path, config: LocalConfig) -> None:
-    data = CommentedMap()
+    path = local_config_path(repo_root)
+    data = _load_or_new(path)
     data["version"] = CONFIG_VERSION
-    data["global"] = CommentedMap({"excluded_rule_ids": list(config.excluded_rule_ids)})
-    write_yaml_atomic(local_config_path(repo_root), data)
+    _update_section(
+        data, "global", {"excluded_rule_ids": list(config.excluded_rule_ids)}
+    )
+    write_yaml_atomic(path, data)
 
 
 def load_global_config(config_dir: Path) -> GlobalConfig:
@@ -153,13 +159,14 @@ def load_global_config(config_dir: Path) -> GlobalConfig:
 
 
 def save_global_config(config_dir: Path, config: GlobalConfig) -> None:
-    data = CommentedMap()
+    path = global_config_path(config_dir)
+    data = _load_or_new(path)
     data["version"] = CONFIG_VERSION
-    data["paths"] = CommentedMap(
-        {"rules": config.rules_path, "repos": config.repos_path}
+    _update_section(
+        data, "paths", {"rules": config.rules_path, "repos": config.repos_path}
     )
-    data["ast_grep"] = CommentedMap({"command": config.ast_grep_command})
-    write_yaml_atomic(global_config_path(config_dir), data)
+    _update_section(data, "ast_grep", {"command": config.ast_grep_command})
+    write_yaml_atomic(path, data)
 
 
 def load_repo_registry(path: Path) -> list[Path]:
@@ -172,7 +179,7 @@ def load_repo_registry(path: Path) -> list[Path]:
 
 
 def save_repo_registry(path: Path, repos: list[Path]) -> None:
-    data = CommentedMap()
+    data = _load_or_new(path)
     data["version"] = CONFIG_VERSION
     data["repos"] = [str(repo) for repo in repos]
     write_yaml_atomic(path, data)
@@ -187,6 +194,22 @@ def register_repo(repo_root: Path, registry_path: Path) -> bool:
     repos.append(resolved)
     save_repo_registry(registry_path, repos)
     return True
+
+
+def _load_or_new(path: Path) -> CommentedMap:
+    return load_yaml_mapping(path) if path.is_file() else CommentedMap()
+
+
+def _update_section(
+    data: CommentedMap, key: str, values: dict[str, str | None | list[str]]
+) -> None:
+    """Set managed keys in place so user comments and unknown keys survive."""
+    section = data.get(key)
+    if not isinstance(section, CommentedMap):
+        section = CommentedMap()
+        data[key] = section
+    for name, value in values.items():
+        section[name] = value
 
 
 def _check_version(data: CommentedMap, path: Path) -> None:
