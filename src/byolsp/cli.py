@@ -47,6 +47,8 @@ def build_parser() -> argparse.ArgumentParser:
             _add_sync_arguments(command)
         if name == "doctor":
             _add_doctor_arguments(command)
+        if name == "list":
+            _add_list_arguments(command)
         if name == "hook":
             actions = command.add_subparsers(dest="hook_action", required=True)
             actions.add_parser("install", help="Install agent integration files")
@@ -107,6 +109,20 @@ def _add_sync_arguments(command: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_list_arguments(command: argparse.ArgumentParser) -> None:
+    _add_repo_argument(command)
+    command.add_argument(
+        "--scope",
+        # Mirrors listing.LIST_SCOPES; spelled out so --help stays import-light.
+        choices=("project", "local", "global", "effective", "all"),
+        default="effective",
+        help="Which rules to show (default: effective, what ast-grep sees)",
+    )
+    command.add_argument(
+        "--json", action="store_true", help="Emit machine-readable JSON"
+    )
+
+
 def _add_doctor_arguments(command: argparse.ArgumentParser) -> None:
     _add_repo_argument(command)
     command.add_argument(
@@ -141,6 +157,10 @@ def run(args: argparse.Namespace) -> int:
         from byolsp.doctor import run_doctor
 
         return run_doctor(args)
+    if args.command == "list":
+        from byolsp.listing import run_list
+
+        return run_list(args)
     raise ByolspError(f"'{args.command}' is not implemented yet")
 
 

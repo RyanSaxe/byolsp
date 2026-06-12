@@ -1,0 +1,109 @@
+"""`byolsp list`: show rules and where they come from (SPEC 15.8)."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal
+
+from byolsp.config import load_local_config, load_repo_config
+from byolsp.paths import global_config_dir, resolve_repo_root
+from byolsp.rules import load_rules
+from byolsp.sync import compute_sync_plan, load_canonical_rules
+
+ListScope = Literal["project", "local", "global", "effective", "all"]
+
+LIST_SCOPES = ("project", "local", "global", "effective", "all")
+
+
+@dataclass
+class ListedRule:
+    scope: str
+    id: str
+    path: str
+    """Repo-relative POSIX path of the rule file ast-grep reads."""
+
+
+def run_list(args: argparse.Namespace) -> int:
+    repo_root = resolve_repo_root(explicit=args.repo)
+    scope: ListScope = args.scope
+    rules = collect_rules(repo_root, scope)
+    skipped = (
+        collect_skipped(repo_root, global_config_dir()) if scope == "all" else None
+    )
+    if args.json:
+        print(json.dumps(_json_payload(rules, skipped), indent=2))
+    else:
+        for line in render_listing(rules, skipped or []):
+            print(line)
+    return 0
+
+
+def collect_rules(repo_root: Path, scope: ListScope) -> list[ListedRule]:
+    """Rules in display order: project, then local, then synced global copies.
+
+    The `global` rows are the mirrored copies ast-grep actually reads; after
+    the self-heal preamble they match the canonical rules minus skips.
+    """
+    paths = load_repo_config(repo_root).paths
+    directories = {
+        "project": paths.project_rules,
+        "local": paths.personal_local_rules,
+        "global": paths.personal_global_rules,
+    }
+    wanted = (
+        ("project", "local", "global") if scope in ("effective", "all") else (scope,)
+    )
+    return [
+        ListedRule(
+            scope=name,
+            id=rule.id,
+            path=rule.path.relative_to(repo_root).as_posix(),
+        )
+        for name in wanted
+        for rule in load_rules(repo_root / directories[name])
+    ]
+
+
+def collect_skipped(repo_root: Path, config_dir: Path) -> list[tuple[str, str]]:
+    """(rule ID, reason) for canonical global rules sync does not mirror."""
+    paths = load_repo_config(repo_root).paths
+    plan = compute_sync_plan(
+        repo_root / paths.project_rules,
+        repo_root / paths.personal_local_rules,
+        load_local_config(repo_root).excluded_rule_ids,
+        load_canonical_rules(config_dir),
+    )
+    return plan.skipped
+
+
+def render_listing(
+    rules: list[ListedRule], skipped: list[tuple[str, str]]
+) -> list[str]:
+    rows = [(rule.scope, rule.id, rule.path) for rule in rules]
+    rows += [("skipped", rule_id, reason) for rule_id, reason in skipped]
+    if not rows:
+        return []
+    scope_width = max(len(scope) for scope, _, _ in rows)
+    id_width = max(len(rule_id) for _, rule_id, _ in rows)
+    return [
+        f"{scope:<{scope_width}}  {rule_id:<{id_width}}  {detail}"
+        for scope, rule_id, detail in rows
+    ]
+
+
+def _json_payload(
+    rules: list[ListedRule], skipped: list[tuple[str, str]] | None
+) -> dict[str, list[dict[str, str]]]:
+    payload = {
+        "rules": [
+            {"scope": rule.scope, "id": rule.id, "path": rule.path} for rule in rules
+        ]
+    }
+    if skipped is not None:
+        payload["skipped"] = [
+            {"id": rule_id, "reason": reason} for rule_id, reason in skipped
+        ]
+    return payload
