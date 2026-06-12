@@ -1,0 +1,109 @@
+from pathlib import Path
+
+import pytest
+
+from byolsp.config import (
+    GlobalConfig,
+    LocalConfig,
+    RepoConfig,
+    global_rules_dir,
+    load_global_config,
+    load_local_config,
+    load_repo_config,
+    load_repo_registry,
+    register_repo,
+    repo_registry_path,
+    save_global_config,
+    save_local_config,
+    save_repo_config,
+)
+from byolsp.errors import ConfigError, RepoNotInitialized
+
+
+def test_repo_config_round_trips_and_writes_version(tmp_path: Path) -> None:
+    config = RepoConfig(project_name="demo", agents=["claude-code"])
+
+    save_repo_config(tmp_path, config)
+
+    assert load_repo_config(tmp_path) == config
+    assert "version: 1" in (tmp_path / ".byolsp" / "config.yml").read_text()
+
+
+def test_repo_config_missing_means_repo_not_initialized(tmp_path: Path) -> None:
+    with pytest.raises(RepoNotInitialized, match="byolsp init"):
+        load_repo_config(tmp_path)
+
+
+def test_repo_config_rejects_unsupported_version(tmp_path: Path) -> None:
+    (tmp_path / ".byolsp").mkdir()
+    (tmp_path / ".byolsp" / "config.yml").write_text("version: 2\n")
+
+    with pytest.raises(ConfigError, match="version"):
+        load_repo_config(tmp_path)
+
+
+def test_repo_config_rejects_wrongly_typed_values(tmp_path: Path) -> None:
+    (tmp_path / ".byolsp").mkdir()
+    (tmp_path / ".byolsp" / "config.yml").write_text(
+        "version: 1\nai:\n  agents: not-a-list\n"
+    )
+
+    with pytest.raises(ConfigError, match="list of strings"):
+        load_repo_config(tmp_path)
+
+
+def test_local_config_defaults_when_file_absent(tmp_path: Path) -> None:
+    assert load_local_config(tmp_path) == LocalConfig()
+
+
+def test_local_config_round_trips(tmp_path: Path) -> None:
+    config = LocalConfig(excluded_rule_ids=["no-python-cast"])
+
+    save_local_config(tmp_path, config)
+
+    assert load_local_config(tmp_path) == config
+
+
+def test_global_config_defaults_when_file_absent(tmp_path: Path) -> None:
+    assert load_global_config(tmp_path) == GlobalConfig()
+
+
+def test_global_config_round_trips(tmp_path: Path) -> None:
+    config = GlobalConfig(ast_grep_command="sg")
+
+    save_global_config(tmp_path, config)
+
+    assert load_global_config(tmp_path) == config
+
+
+def test_global_config_partial_file_fills_defaults(tmp_path: Path) -> None:
+    (tmp_path / "config.yml").write_text("version: 1\nast_grep:\n  command: sg\n")
+
+    loaded = load_global_config(tmp_path)
+
+    assert loaded.ast_grep_command == "sg"
+    assert loaded.rules_path == "rules"
+    assert loaded.repos_path == "repos.yml"
+
+
+def test_global_paths_resolve_relative_to_config_dir_unless_absolute(
+    tmp_path: Path,
+) -> None:
+    relative = GlobalConfig()
+    absolute = GlobalConfig(rules_path="/elsewhere/rules")
+
+    assert global_rules_dir(tmp_path, relative) == tmp_path / "rules"
+    assert repo_registry_path(tmp_path, relative) == tmp_path / "repos.yml"
+    assert global_rules_dir(tmp_path, absolute) == Path("/elsewhere/rules")
+
+
+def test_register_repo_creates_registry_and_is_idempotent(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config" / "byolsp"
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    assert register_repo(repo, config_dir) is True
+    assert register_repo(repo, config_dir) is False
+
+    registry = load_repo_registry(config_dir / "repos.yml")
+    assert registry.repos == [repo.resolve()]

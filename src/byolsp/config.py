@@ -1,0 +1,247 @@
+"""Typed load/save for the four BYOLSP config schemas (SPEC section 10)."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from ruamel.yaml.comments import CommentedMap
+
+from byolsp.errors import ConfigError, RepoNotInitialized
+from byolsp.yamlio import load_yaml_mapping, write_yaml_atomic
+
+CONFIG_VERSION = 1
+
+
+@dataclass
+class RepoPaths:
+    """POSIX-style paths relative to the repo root."""
+
+    sgconfig: str = "sgconfig.yml"
+    project_rules: str = ".byolsp/rules/project"
+    personal_local_rules: str = ".byolsp/rules/personal/local"
+    personal_global_rules: str = ".byolsp/rules/personal/global"
+
+
+@dataclass
+class RepoConfig:
+    """Tracked repository config: .byolsp/config.yml."""
+
+    project_name: str | None = None
+    paths: RepoPaths = field(default_factory=RepoPaths)
+    agents: list[str] = field(default_factory=list)
+
+
+@dataclass
+class LocalConfig:
+    """Untracked per-user repository config: .byolsp/local.yml."""
+
+    excluded_rule_ids: list[str] = field(default_factory=list)
+
+
+@dataclass
+class GlobalConfig:
+    """Global user config: <global dir>/config.yml.
+
+    Paths are relative to the global config dir unless absolute.
+    """
+
+    rules_path: str = "rules"
+    repos_path: str = "repos.yml"
+    ast_grep_command: str = "auto"
+
+
+@dataclass
+class RepoRegistry:
+    """Absolute roots of repositories registered for `sync --all`."""
+
+    repos: list[Path] = field(default_factory=list)
+
+
+def repo_config_path(repo_root: Path) -> Path:
+    return repo_root / ".byolsp" / "config.yml"
+
+
+def local_config_path(repo_root: Path) -> Path:
+    return repo_root / ".byolsp" / "local.yml"
+
+
+def global_config_path(config_dir: Path) -> Path:
+    return config_dir / "config.yml"
+
+
+def global_rules_dir(config_dir: Path, config: GlobalConfig) -> Path:
+    return _resolve_under(config_dir, config.rules_path)
+
+
+def repo_registry_path(config_dir: Path, config: GlobalConfig) -> Path:
+    return _resolve_under(config_dir, config.repos_path)
+
+
+def load_repo_config(repo_root: Path) -> RepoConfig:
+    path = repo_config_path(repo_root)
+    if not path.is_file():
+        raise RepoNotInitialized(
+            f"{repo_root} has no .byolsp/config.yml. Run `byolsp init` first."
+        )
+    data = load_yaml_mapping(path)
+    _check_version(data, path)
+    project = _section(data, "project", path)
+    paths = _section(data, "paths", path)
+    ai = _section(data, "ai", path)
+    defaults = RepoPaths()
+    return RepoConfig(
+        project_name=_optional_string(project, "name", path),
+        paths=RepoPaths(
+            sgconfig=_string(paths, "sgconfig", defaults.sgconfig, path),
+            project_rules=_string(paths, "project_rules", defaults.project_rules, path),
+            personal_local_rules=_string(
+                paths, "personal_local_rules", defaults.personal_local_rules, path
+            ),
+            personal_global_rules=_string(
+                paths, "personal_global_rules", defaults.personal_global_rules, path
+            ),
+        ),
+        agents=_string_list(ai, "agents", path),
+    )
+
+
+def save_repo_config(repo_root: Path, config: RepoConfig) -> None:
+    data = CommentedMap()
+    data["version"] = CONFIG_VERSION
+    data["project"] = CommentedMap({"name": config.project_name})
+    data["paths"] = CommentedMap(
+        {
+            "sgconfig": config.paths.sgconfig,
+            "project_rules": config.paths.project_rules,
+            "personal_local_rules": config.paths.personal_local_rules,
+            "personal_global_rules": config.paths.personal_global_rules,
+        }
+    )
+    data["ai"] = CommentedMap({"agents": list(config.agents)})
+    write_yaml_atomic(repo_config_path(repo_root), data)
+
+
+def load_local_config(repo_root: Path) -> LocalConfig:
+    """Load .byolsp/local.yml, defaulting when absent (it is gitignored)."""
+    path = local_config_path(repo_root)
+    if not path.is_file():
+        return LocalConfig()
+    data = load_yaml_mapping(path)
+    _check_version(data, path)
+    section = _section(data, "global", path)
+    return LocalConfig(
+        excluded_rule_ids=_string_list(section, "excluded_rule_ids", path)
+    )
+
+
+def save_local_config(repo_root: Path, config: LocalConfig) -> None:
+    data = CommentedMap()
+    data["version"] = CONFIG_VERSION
+    data["global"] = CommentedMap({"excluded_rule_ids": list(config.excluded_rule_ids)})
+    write_yaml_atomic(local_config_path(repo_root), data)
+
+
+def load_global_config(config_dir: Path) -> GlobalConfig:
+    """Load <global dir>/config.yml, defaulting when absent (init creates it)."""
+    path = global_config_path(config_dir)
+    if not path.is_file():
+        return GlobalConfig()
+    data = load_yaml_mapping(path)
+    _check_version(data, path)
+    paths = _section(data, "paths", path)
+    ast_grep = _section(data, "ast_grep", path)
+    defaults = GlobalConfig()
+    return GlobalConfig(
+        rules_path=_string(paths, "rules", defaults.rules_path, path),
+        repos_path=_string(paths, "repos", defaults.repos_path, path),
+        ast_grep_command=_string(ast_grep, "command", defaults.ast_grep_command, path),
+    )
+
+
+def save_global_config(config_dir: Path, config: GlobalConfig) -> None:
+    data = CommentedMap()
+    data["version"] = CONFIG_VERSION
+    data["paths"] = CommentedMap(
+        {"rules": config.rules_path, "repos": config.repos_path}
+    )
+    data["ast_grep"] = CommentedMap({"command": config.ast_grep_command})
+    write_yaml_atomic(global_config_path(config_dir), data)
+
+
+def load_repo_registry(path: Path) -> RepoRegistry:
+    if not path.is_file():
+        return RepoRegistry()
+    data = load_yaml_mapping(path)
+    _check_version(data, path)
+    return RepoRegistry(
+        repos=[Path(entry) for entry in _string_list(data, "repos", path)]
+    )
+
+
+def save_repo_registry(path: Path, registry: RepoRegistry) -> None:
+    data = CommentedMap()
+    data["version"] = CONFIG_VERSION
+    data["repos"] = [str(repo) for repo in registry.repos]
+    write_yaml_atomic(path, data)
+
+
+def register_repo(repo_root: Path, config_dir: Path) -> bool:
+    """Record repo_root in the global registry. Returns True when newly added."""
+    registry_path = repo_registry_path(config_dir, load_global_config(config_dir))
+    registry = load_repo_registry(registry_path)
+    resolved = repo_root.resolve()
+    if resolved in registry.repos:
+        return False
+    registry.repos.append(resolved)
+    save_repo_registry(registry_path, registry)
+    return True
+
+
+def _resolve_under(config_dir: Path, value: str) -> Path:
+    path = Path(value)
+    return path if path.is_absolute() else config_dir / path
+
+
+def _check_version(data: CommentedMap, path: Path) -> None:
+    if data.get("version") != CONFIG_VERSION:
+        raise ConfigError(f"{path}: expected `version: {CONFIG_VERSION}`")
+
+
+def _section(data: CommentedMap, key: str, path: Path) -> CommentedMap:
+    value = data.get(key)
+    if value is None:
+        return CommentedMap()
+    if not isinstance(value, CommentedMap):
+        raise ConfigError(f"{path}: expected '{key}' to be a mapping")
+    return value
+
+
+def _string(section: CommentedMap, key: str, default: str, path: Path) -> str:
+    value = section.get(key, default)
+    if not isinstance(value, str):
+        raise ConfigError(f"{path}: expected '{key}' to be a string")
+    return value
+
+
+def _optional_string(section: CommentedMap, key: str, path: Path) -> str | None:
+    value = section.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ConfigError(f"{path}: expected '{key}' to be a string or null")
+    return value
+
+
+def _string_list(section: CommentedMap, key: str, path: Path) -> list[str]:
+    value = section.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ConfigError(f"{path}: expected '{key}' to be a list of strings")
+    items: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            raise ConfigError(f"{path}: expected '{key}' to be a list of strings")
+        items.append(item)
+    return items
