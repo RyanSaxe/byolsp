@@ -82,10 +82,10 @@ project rule later and the global rule returns naturally on the next sync.
 `include` removes the entry and the copy comes back — unless a project or
 local rule still owns the ID, in which case it stays skipped.
 
-**A fresh clone, before byolsp is installed.** Tracked `.gitkeep` files keep
-the rule directories present, so `ast-grep scan` works with project rules
-immediately. Personal rules appear after `uvx byolsp init` (or any byolsp
-command) runs.
+**A fresh clone, before byolsp is installed.** Tracked `.gitkeep` and
+`.ignore` files keep the rule directories present and ast-grep-visible, so
+`ast-grep scan` works with project rules immediately. Personal rules appear
+after `uvx byolsp init` (or any byolsp command) runs.
 
 ## The git-pull collision case
 
@@ -117,16 +117,24 @@ Shim safety rules:
   (husky, lefthook, ...), is never touched — byolsp prints the one
   `byolsp sync` line to add to your existing hook setup instead.
 
-## Known limitation: gitignored rule files in git repositories
+## Git-ignored, yet visible to ast-grep
 
 `init` gitignores personal rule files with the patterns
-`.byolsp/rules/personal/{local,global}/*.yml` (and `.yaml`). Inside a git
-repository, ast-grep's rule discovery respects gitignore, so a rule file
-sitting *directly* at one of those directory roots is skipped by
-`ast-grep scan`/LSP — while a rule nested one level down
-(e.g. `personal/global/python/no-python-cast.yml`) is loaded but not
-gitignored, because `*` does not cross `/`. Note that `byolsp add` writes new
-rules directly at the scope root. Until this is resolved, keep canonical
-global and local rules nested by language or topic — move an added rule into
-a subdirectory like `python/` — so the files ast-grep reads stay visible to
-it.
+`.byolsp/rules/personal/{local,global}/**/*.yml` (and `.yaml`): local rules
+are private and the global mirror is generated, so neither belongs in the
+team's history. But ast-grep's rule discovery respects gitignore, which would
+hide those very files from `ast-grep scan`/LSP inside a git repository.
+
+ast-grep also reads `.ignore` files, which git does not. `init` therefore
+writes a tracked `.ignore` file into each personal rule directory whose
+negations un-ignore the rules for ast-grep alone:
+
+```text
+!*.yml
+!*.yaml
+```
+
+Git never reads these files, so the personal rules stay out of `git status`.
+Sync restores the mirror's `.ignore` if it goes missing (the mirror is wholly
+byolsp-owned), and `byolsp doctor` flags either directory when its `.ignore`
+no longer keeps the rules visible.
