@@ -101,3 +101,12 @@ def test_skill_render_alone_does_not_count_as_claude_code(home: Path) -> None:
 
     assert (repo / ".byolsp" / "agents" / "claude-code.md").is_file()
     assert not (repo / ".claude" / "settings.json").exists()
+
+
+def test_user_owned_skill_file_counts_as_claude_code(home: Path) -> None:
+    repo = make_repo(home)
+    (repo / SKILL_RELPATHS[1]).write_text("my own skill\n")  # no marker: user-owned
+
+    assert main(["hook", "install", "--repo", str(repo), "--agent", "claude-code"]) == 0
+
+    assert (repo / ".claude" / "settings.json").is_file()

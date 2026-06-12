@@ -8,6 +8,8 @@ with single hyphens, description of at most 1024 chars.
 
 from __future__ import annotations
 
+from byolsp.fsio import MANAGED_MARKER
+
 SKILL_RELPATHS = (
     ".agents/skills/byolsp/SKILL.md",
     ".claude/skills/byolsp/SKILL.md",
@@ -170,14 +172,13 @@ ast-grep run -p 'print($$$ARGS)' --lang python .
 """
 
 
-def skill_markdown(marker: str) -> str:
-    """Render the SKILL.md: frontmatter at byte 0, then the managed marker."""
-    return (
-        "---\n"
-        f"name: {SKILL_NAME}\n"
-        f"description: {SKILL_DESCRIPTION}\n"
-        "---\n"
-        f"{marker}\n"
-        "\n"
-        f"{SKILL_BODY}"
-    )
+# Frontmatter at byte 0, then the managed marker, then the body.
+SKILL_MARKDOWN = (
+    "---\n"
+    f"name: {SKILL_NAME}\n"
+    f"description: {SKILL_DESCRIPTION}\n"
+    "---\n"
+    f"{MANAGED_MARKER}\n"
+    "\n"
+    f"{SKILL_BODY}"
+)

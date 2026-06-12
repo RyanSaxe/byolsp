@@ -10,7 +10,27 @@ from typing import Literal
 
 NEW_FILE_MODE = 0o666
 
+MANAGED_MARKER = "<!-- Managed by BYOLSP. Manual edits may be overwritten. -->"
+
 MarkedWriteResult = Literal["written", "unchanged", "unmarked"]
+
+MarkedTextStatus = Literal["missing", "unmarked", "unchanged", "drifted"]
+
+
+def marked_text_status(path: Path, content: str, marker: str) -> MarkedTextStatus:
+    """Classify a path against the content a managed write would produce (SPEC 17).
+
+    Files without the marker are user-owned; marker-bearing files that differ
+    from `content` have drifted and need a rewrite.
+    """
+    if not path.is_file():
+        return "missing"
+    existing = path.read_text(encoding="utf-8")
+    if marker not in existing:
+        return "unmarked"
+    if existing == content:
+        return "unchanged"
+    return "drifted"
 
 
 def write_marked_text(path: Path, content: str, marker: str) -> MarkedWriteResult:
@@ -18,12 +38,9 @@ def write_marked_text(path: Path, content: str, marker: str) -> MarkedWriteResul
 
     Files without the marker are user-owned and never touched.
     """
-    if path.is_file():
-        existing = path.read_text(encoding="utf-8")
-        if marker not in existing:
-            return "unmarked"
-        if existing == content:
-            return "unchanged"
+    status = marked_text_status(path, content, marker)
+    if status == "unmarked" or status == "unchanged":
+        return status
     write_text_atomic(path, content)
     return "written"
 

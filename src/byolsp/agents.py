@@ -5,22 +5,26 @@ from __future__ import annotations
 import argparse
 import json
 from collections.abc import Sequence
+from itertools import takewhile
 from pathlib import Path
 from typing import TypeAlias
 
 from byolsp.config import load_repo_config, save_repo_config
 from byolsp.errors import ConfigError
-from byolsp.fsio import write_marked_text, write_text_atomic
+from byolsp.fsio import (
+    MANAGED_MARKER,
+    marked_text_status,
+    write_marked_text,
+    write_text_atomic,
+)
 from byolsp.paths import resolve_repo_root
-from byolsp.skill import SKILL_RELPATHS, skill_markdown
+from byolsp.skill import SKILL_MARKDOWN, SKILL_RELPATHS
 
 JsonValue: TypeAlias = (
     "None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]"
 )
 
 AGENT_CHOICES = ("generic", "claude-code", "codex", "copilot", "skill")
-
-MANAGED_MARKER = "<!-- Managed by BYOLSP. Manual edits may be overwritten. -->"
 
 AGENT_INSTRUCTIONS_RELPATH = ".byolsp/agents/README.md"
 
@@ -113,48 +117,44 @@ def uninstall_agent(repo_root: Path, agent: str) -> list[str]:
     return messages
 
 
-def missing_agent_files(repo_root: Path, agents: Sequence[str]) -> list[str]:
-    """Expected-but-missing integration files for doctor's agent_files check."""
-    missing: list[str] = []
+def agent_file_problems(repo_root: Path, agents: Sequence[str]) -> list[str]:
+    """Human-readable integration-file problems for doctor's agent_files check."""
+    problems: list[str] = []
     for agent in agents:
         if agent == "skill":
-            missing.extend(_missing_skill_renders(repo_root))
+            problems.extend(_skill_render_problems(repo_root))
             continue
         if agent == "claude-code" and _claude_code_installed(repo_root):
             continue
         relpath = _instructions_relpath(agent)
         if not (repo_root / relpath).is_file():
-            missing.append(relpath)
-    return missing
+            problems.append(f"{relpath} is missing")
+    return problems
 
 
 def _install_skill(repo_root: Path) -> list[str]:
     """Render the rule-capture skill into both discovery locations (SPEC 27.1)."""
-    content = skill_markdown(MANAGED_MARKER)
     messages: list[str] = []
     for relpath in SKILL_RELPATHS:
-        messages.extend(_write_managed_file(repo_root, relpath, content))
+        messages.extend(_write_managed_file(repo_root, relpath, SKILL_MARKDOWN))
     return messages
 
 
-def _missing_skill_renders(repo_root: Path) -> list[str]:
+def _skill_render_problems(repo_root: Path) -> list[str]:
     """Both renders must exist and match the canonical content (SPEC 27.2).
 
     A marker-bearing render that drifted from the canonical content counts:
     `byolsp hook install --agent skill` refreshes it. Unmarked files at these
     paths are user-owned and accepted as is.
     """
-    content = skill_markdown(MANAGED_MARKER)
-    missing: list[str] = []
+    problems: list[str] = []
     for relpath in SKILL_RELPATHS:
-        path = repo_root / relpath
-        if not path.is_file():
-            missing.append(relpath)
-            continue
-        existing = path.read_text(encoding="utf-8")
-        if MANAGED_MARKER in existing and existing != content:
-            missing.append(relpath)
-    return missing
+        status = marked_text_status(repo_root / relpath, SKILL_MARKDOWN, MANAGED_MARKER)
+        if status == "missing":
+            problems.append(f"{relpath} is missing")
+        elif status == "drifted":
+            problems.append(f"{relpath} is out of date")
+    return problems
 
 
 def _instructions_relpath(agent: str) -> str:
@@ -242,19 +242,24 @@ def _install_claude_code(repo_root: Path) -> list[str]:
 
 
 def _claude_code_detected(repo_root: Path) -> bool:
-    """True when .claude/ holds anything beyond the byolsp skill render.
+    """True when .claude/ holds anything beyond the byolsp-managed skill render.
 
-    init plants the skill at .claude/skills/byolsp/ in every repo (SPEC 27.1),
-    so that subtree alone is byolsp's own output, not evidence of Claude Code.
+    init plants the skill at the .claude path in SKILL_RELPATHS in every repo
+    (SPEC 27.1), so that subtree alone is byolsp's own output, not evidence of
+    Claude Code. An unmarked file there is user-owned (SPEC 17) and does count.
     """
     claude_dir = repo_root / ".claude"
     if not claude_dir.is_dir():
         return False
-    entries = {entry.name for entry in claude_dir.iterdir()}
-    if entries != {"skills"}:
+    render = repo_root / _claude_skill_relpath()
+    render_subtree = {render, *takewhile(lambda p: p != claude_dir, render.parents)}
+    if set(claude_dir.rglob("*")) != render_subtree:
         return True
-    skills = {entry.name for entry in (claude_dir / "skills").iterdir()}
-    return skills != {"byolsp"}
+    return MANAGED_MARKER not in render.read_text(encoding="utf-8")
+
+
+def _claude_skill_relpath() -> str:
+    return next(p for p in SKILL_RELPATHS if p.startswith(".claude/"))
 
 
 def _claude_code_installed(repo_root: Path) -> bool:
