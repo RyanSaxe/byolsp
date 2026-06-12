@@ -1,7 +1,9 @@
 """`byolsp agent-check` against the real ast-grep binary (SPEC 15.9)."""
 
+import io
 import json
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -170,6 +172,34 @@ def test_json_format_emits_one_issue_per_diagnostic(
             }
         ]
     }
+
+
+def test_stdin_hook_scans_the_edited_file_from_the_claude_payload(
+    check_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source = check_repo / "src.py"
+    source.write_text('x = cast(int, "1")\n')
+    payload = {"tool_input": {"file_path": str(source)}}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+
+    assert check(check_repo, "--stdin-hook") == 2
+
+    assert "Rule: no-python-cast" in capsys.readouterr().out
+
+
+def test_stdin_hook_without_a_file_path_scans_nothing(
+    check_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (check_repo / "src.py").write_text('x = cast(int, "1")\n')
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({"tool_input": {}})))
+
+    assert check(check_repo, "--stdin-hook") == 0
+
+    assert capsys.readouterr().out == ""
 
 
 def test_scan_failure_is_a_clean_tool_error(

@@ -216,13 +216,19 @@ def _add_rule_id_arguments(command: argparse.ArgumentParser) -> None:
 
 def _add_agent_check_arguments(command: argparse.ArgumentParser) -> None:
     _add_repo_argument(command)
-    command.add_argument(
+    source = command.add_mutually_exclusive_group()
+    source.add_argument(
         "--files",
         nargs="+",
         type=Path,
         default=(),
         metavar="FILE",
         help="Files to scan (default: the whole repository)",
+    )
+    source.add_argument(
+        "--stdin-hook",
+        action="store_true",
+        help="Read the edited file from a Claude Code hook JSON payload on stdin",
     )
     command.add_argument(
         "--format",

@@ -27,14 +27,10 @@ CLAUDE_SETTINGS_RELPATH = ".claude/settings.json"
 
 CLAUDE_HOOK_MATCHER = "Write|Edit|MultiEdit|NotebookEdit"
 
-# Claude Code pipes tool-call JSON to PostToolUse hooks on stdin; on exit 2 it
-# feeds the hook's stderr back to the model, hence the >&2 (agent-check exits 2
-# exactly when it has diagnostics). The edited path stays quoted (SPEC 19).
-CLAUDE_HOOK_COMMAND = (
-    "f=$(python3 -c 'import json,sys; "
-    'print(json.load(sys.stdin).get("tool_input", {}).get("file_path") or "")\'); '
-    '[ -z "$f" ] || byolsp agent-check --files "$f" >&2'
-)
+# Claude Code pipes tool-call JSON to PostToolUse hooks on stdin, which
+# --stdin-hook parses directly; on exit 2 it feeds the hook's stderr back to
+# the model, hence the >&2 (agent-check exits 2 exactly with diagnostics).
+CLAUDE_HOOK_COMMAND = "byolsp agent-check --stdin-hook >&2"
 
 CORE_INSTRUCTION = """\
 This repository uses BYOLSP to expose custom ast-grep diagnostics.

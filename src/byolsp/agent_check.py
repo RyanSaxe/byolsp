@@ -33,9 +33,15 @@ class Diagnostic:
 
 def run_agent_check(args: argparse.Namespace) -> int:
     repo_root = resolve_repo_root(explicit=args.repo)
+    if args.stdin_hook:
+        hook_files = _hook_payload_files()
+        if not hook_files:
+            return 0
+    else:
+        hook_files = list(args.files)
     config_dir = global_config_dir()
     executable = resolve_ast_grep(load_global_config(config_dir).ast_grep_command)
-    files = [file.resolve() for file in args.files]
+    files = [file.resolve() for file in hook_files]
     result = scan_files(executable, repo_root, files, max_results=args.max_results)
     if result.warnings:
         print(result.warnings, file=sys.stderr)
@@ -50,6 +56,27 @@ def run_agent_check(args: argparse.Namespace) -> int:
         for line in render_diagnostics(diagnostics, limit):
             print(line)
     return DIAGNOSTICS_EXIT_CODE if diagnostics else 0
+
+
+def _hook_payload_files() -> list[Path]:
+    """The edited file in a Claude Code PostToolUse payload on stdin (SPEC 15.10).
+
+    Payloads without one — including malformed ones, which must never block
+    the agent loop — yield [] so the caller scans nothing.
+    """
+    try:
+        payload = json.loads(sys.stdin.read())
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(payload, dict):
+        return []
+    tool_input = payload.get("tool_input")
+    if not isinstance(tool_input, dict):
+        return []
+    file_path = tool_input.get("file_path")
+    if isinstance(file_path, str) and file_path:
+        return [Path(file_path)]
+    return []
 
 
 def collect_diagnostics(matches: list[ScanMatch], repo_root: Path) -> list[Diagnostic]:
