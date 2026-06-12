@@ -25,3 +25,7 @@ class RuleValidationError(ByolspError):
 
 class DuplicateRuleId(ByolspError):
     """Two rule files share an ID in a way ast-grep would reject (SPEC section 14)."""
+
+
+class UnsafeOverwrite(ByolspError):
+    """Refusing to overwrite an existing file without an explicit flag."""

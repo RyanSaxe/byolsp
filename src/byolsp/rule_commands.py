@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+import os
+import shlex
+import subprocess
+import sys
+import tempfile
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from byolsp.config import (
@@ -14,8 +19,48 @@ from byolsp.config import (
     load_repo_config,
     save_local_config,
 )
+from byolsp.doctor import quick_doctor_problems
+from byolsp.errors import (
+    ByolspError,
+    ConfigError,
+    RuleValidationError,
+    UnsafeOverwrite,
+)
+from byolsp.fsio import write_text_atomic
 from byolsp.paths import global_config_dir, resolve_repo_root
-from byolsp.sync import SyncPlan, load_canonical_rules, summarize_changes, sync_repo
+from byolsp.rules import (
+    Rule,
+    RuleScope,
+    check_id_conflicts,
+    load_rule,
+    load_rules,
+    rule_id_warnings,
+    scope_rules_dir,
+)
+from byolsp.sync import (
+    SyncPlan,
+    iter_registered_repos,
+    load_canonical_rules,
+    summarize_changes,
+    sync_repo,
+)
+
+DEFAULT_EDITOR = "vi"
+
+RULE_TEMPLATE = """\
+id: {rule_id}
+language: {language}
+severity: warning
+message: REPLACE_ME
+rule:
+  pattern: REPLACE_ME
+metadata:
+  byolsp:
+    rationale: REPLACE_ME
+    agent_prompt: REPLACE_ME
+    allow_with_comment: false
+    tags: []
+"""
 
 
 @dataclass
@@ -38,6 +83,42 @@ def repo_context(args: argparse.Namespace) -> RepoContext:
         paths=load_repo_config(repo_root).paths,
         global_rules_root=global_rules_dir(config_dir, load_global_config(config_dir)),
     )
+
+
+def run_add(args: argparse.Namespace) -> int:
+    template = _build_template(args.id, args.language)
+    if args.from_file is None and not args.edit:
+        print(template)
+        print("Rerun with --from FILE or --edit to create the rule.")
+        return 0
+    context = repo_context(args)
+    scope: RuleScope = args.scope
+    draft: Path | None = None
+    if args.from_file is not None:
+        rule = _load_source_rule(args.from_file)
+    else:
+        draft = _edit_in_draft(template)
+        if draft is None:
+            raise ByolspError("Aborted: the template was left unedited.")
+        rule = _parse_draft(draft)
+    destination = _scope_dir(context, scope) / f"{rule.id}.yml"
+    new_rule = replace(rule, path=destination)
+    try:
+        if destination.exists():
+            raise UnsafeOverwrite(
+                f"{_display(destination, context)} already exists; "
+                f"use `byolsp edit {rule.id}` to change it."
+            )
+        _check_conflicts(context, scope, new_rule, replaced_path=None)
+    except ByolspError as error:
+        raise _with_draft_hint(error, draft) from error
+    if draft is not None:
+        draft.unlink()
+    _warn_on_id_pattern(new_rule)
+    write_text_atomic(destination, rule.content)
+    print(f"Added {scope} rule '{rule.id}' at {_display(destination, context)}")
+    _finish(context, fan_out=scope == "global")
+    return 0
 
 
 def run_exclude(args: argparse.Namespace) -> int:
@@ -68,6 +149,122 @@ def run_include(args: argparse.Namespace) -> int:
         if rule_id == args.rule_id:
             print(f"'{rule_id}' is still skipped: {reason}")
     return 0
+
+
+def _build_template(rule_id: str | None, language: str | None) -> str:
+    return RULE_TEMPLATE.format(
+        rule_id=rule_id or "REPLACE_ME", language=language or "Python"
+    )
+
+
+def _load_source_rule(source: Path) -> Rule:
+    if not source.is_file():
+        raise ConfigError(f"{source}: no such file")
+    return load_rule(source)
+
+
+def _edit_in_draft(content: str) -> Path | None:
+    """Open `content` in $EDITOR via a draft file; None when left unchanged."""
+    draft = _write_draft(content)
+    try:
+        _open_in_editor(draft)
+    except ByolspError:
+        draft.unlink(missing_ok=True)
+        raise
+    if draft.read_text(encoding="utf-8") == content:
+        draft.unlink()
+        return None
+    return draft
+
+
+def _write_draft(content: str) -> Path:
+    handle, name = tempfile.mkstemp(prefix="byolsp-rule-", suffix=".yml")
+    with os.fdopen(handle, "w", encoding="utf-8") as file:
+        file.write(content)
+    return Path(name)
+
+
+def _open_in_editor(path: Path) -> None:
+    """$EDITOR (shlex-split, default vi) as an argv list, never a shell string."""
+    argv = [*shlex.split(os.environ.get("EDITOR") or DEFAULT_EDITOR), str(path)]
+    result = subprocess.run(argv)
+    if result.returncode != 0:
+        raise ByolspError(f"Editor exited with status {result.returncode}; aborting.")
+
+
+def _parse_draft(draft: Path) -> Rule:
+    try:
+        return load_rule(draft)
+    except RuleValidationError as error:
+        raise RuleValidationError(f"{error}\n{_draft_hint(draft)}") from error
+
+
+def _with_draft_hint(error: ByolspError, draft: Path | None) -> ByolspError:
+    """Point at the kept draft file so a failed add/edit never loses work."""
+    if draft is None:
+        return error
+    return error.__class__(f"{error}\n{_draft_hint(draft)}")
+
+
+def _draft_hint(draft: Path) -> str:
+    return f"Your draft is saved at {draft}."
+
+
+def _check_conflicts(
+    context: RepoContext, scope: RuleScope, rule: Rule, replaced_path: Path | None
+) -> None:
+    """Enforce SPEC 14 for the rule set as it would be after writing `rule`."""
+    scoped = {
+        name: [
+            existing
+            for existing in load_rules(_scope_dir(context, name))
+            if existing.path != replaced_path
+        ]
+        for name in ("project", "local", "global")
+    }
+    scoped[scope].append(rule)
+    check_id_conflicts(scoped["project"], scoped["local"], scoped["global"])
+
+
+def _warn_on_id_pattern(rule: Rule) -> None:
+    for warning in rule_id_warnings([rule]):
+        print(f"byolsp: warning: {warning}", file=sys.stderr)
+
+
+def _scope_dir(context: RepoContext, scope: RuleScope) -> Path:
+    return scope_rules_dir(
+        scope, context.repo_root, context.paths, context.global_rules_root
+    )
+
+
+def _display(path: Path, context: RepoContext) -> str:
+    """Repo-relative POSIX for paths inside the repo, absolute otherwise."""
+    try:
+        return path.relative_to(context.repo_root).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _finish(context: RepoContext, fan_out: bool) -> None:
+    """The shared post-action: sync, then surface `doctor --quick` problems.
+
+    Global-scope mutations fan out to every registered repo (SPEC 3.2);
+    everything else syncs the current repo only.
+    """
+    canonical = load_canonical_rules(context.config_dir)
+    repos = [context.repo_root]
+    if fan_out:
+        repos.extend(
+            repo
+            for repo in iter_registered_repos(context.config_dir)
+            if repo != context.repo_root
+        )
+    for repo in repos:
+        _, result = sync_repo(repo, canonical)
+        if result.changed:
+            print(f"Synced {summarize_changes(result)} into {repo}")
+    for problem in quick_doctor_problems(context.repo_root, context.config_dir):
+        print(problem)
 
 
 def _sync_current_repo(context: RepoContext) -> SyncPlan:

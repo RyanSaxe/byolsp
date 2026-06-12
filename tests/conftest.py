@@ -1,5 +1,7 @@
 """Shared scaffolding for CLI-level tests: an isolated home plus rule writers."""
 
+import shlex
+import sys
 from pathlib import Path
 
 import pytest
@@ -42,3 +44,29 @@ def write_global_rule(home: Path, relpath: str, rule_id: str) -> Path:
 def mirror(repo: Path) -> Path:
     """The generated copy of global rules that ast-grep reads in this repo."""
     return repo / ".byolsp" / "rules" / "personal" / "global"
+
+
+def make_editor(directory: Path, content: str) -> str:
+    """An $EDITOR value whose script replaces the edited file with `content`.
+
+    Deliberately multi-word so it exercises the shlex.split contract (SPEC 19).
+    """
+    source = directory / "editor-replacement.yml"
+    source.write_text(content)
+    script = directory / "fake-editor.py"
+    script.write_text(
+        "import sys\n"
+        "from pathlib import Path\n"
+        "Path(sys.argv[2]).write_text(Path(sys.argv[1]).read_text())\n"
+    )
+    return shlex.join([sys.executable, str(script), str(source)])
+
+
+def noop_editor() -> str:
+    """An $EDITOR that exits 0 without touching the file."""
+    return shlex.join([sys.executable, "-c", "pass"])
+
+
+def failing_editor(status: int) -> str:
+    """An $EDITOR that exits nonzero without touching the file."""
+    return shlex.join([sys.executable, "-c", f"raise SystemExit({status})"])

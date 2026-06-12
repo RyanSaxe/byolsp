@@ -49,6 +49,8 @@ def build_parser() -> argparse.ArgumentParser:
             _add_doctor_arguments(command)
         if name == "list":
             _add_list_arguments(command)
+        if name == "add":
+            _add_add_arguments(command)
         if name in ("exclude", "include"):
             _add_rule_id_arguments(command)
         if name == "hook":
@@ -125,6 +127,33 @@ def _add_list_arguments(command: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_add_arguments(command: argparse.ArgumentParser) -> None:
+    _add_repo_argument(command)
+    command.add_argument(
+        "--scope",
+        choices=("project", "local", "global"),
+        required=True,
+        help="Where the new rule lives",
+    )
+    command.add_argument(
+        "--language", help="Language for the generated template (default: Python)"
+    )
+    command.add_argument("--id", help="Rule ID for the generated template")
+    source = command.add_mutually_exclusive_group()
+    source.add_argument(
+        "--from",
+        dest="from_file",
+        type=Path,
+        metavar="FILE",
+        help="Copy an existing ast-grep YAML rule file",
+    )
+    source.add_argument(
+        "--edit",
+        action="store_true",
+        help="Open a generated template in $EDITOR",
+    )
+
+
 def _add_rule_id_arguments(command: argparse.ArgumentParser) -> None:
     _add_repo_argument(command)
     command.add_argument("rule_id", metavar="RULE_ID", help="ID of a global rule")
@@ -168,6 +197,10 @@ def run(args: argparse.Namespace) -> int:
         from byolsp.listing import run_list
 
         return run_list(args)
+    if args.command == "add":
+        from byolsp.rule_commands import run_add
+
+        return run_add(args)
     if args.command == "exclude":
         from byolsp.rule_commands import run_exclude
 
