@@ -27,6 +27,13 @@ def test_round_trip_preserves_comments_and_key_order(tmp_path: Path) -> None:
     assert content.index("utilDirs") < content.index("testConfigs")
 
 
+def test_load_treats_empty_document_as_empty_mapping(tmp_path: Path) -> None:
+    path = tmp_path / "sgconfig.yml"
+    path.write_text("# comment-only file\n")
+
+    assert load_yaml_mapping(path) == {}
+
+
 def test_load_rejects_non_mapping_top_level(tmp_path: Path) -> None:
     path = tmp_path / "list.yml"
     path.write_text("- just\n- a list\n")
