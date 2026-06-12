@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from byolsp.agents import AGENT_CHOICES, install_agent_instructions
 from byolsp.config import (
     GlobalConfig,
     LocalConfig,
@@ -25,34 +26,9 @@ from byolsp.config import (
     save_repo_registry,
 )
 from byolsp.errors import ConfigError, RepoNotInitialized
-from byolsp.fsio import write_text_atomic
 from byolsp.ignore import IgnoreMode, ignore_file, write_ignore_block
 from byolsp.paths import global_config_dir, resolve_repo_root
 from byolsp.sgconfig import ensure_rule_dirs
-
-AGENT_CHOICES = ("generic", "claude-code", "codex", "copilot")
-
-MANAGED_MARKER = "<!-- Managed by BYOLSP. Manual edits may be overwritten. -->"
-
-AGENT_INSTRUCTIONS_RELPATH = ".byolsp/agents/README.md"
-
-GENERIC_AGENT_INSTRUCTIONS = f"""{MANAGED_MARKER}
-
-# BYOLSP Agent Instructions
-
-This repository uses BYOLSP to expose custom ast-grep diagnostics.
-
-After writing or editing code, run:
-
-```bash
-byolsp agent-check --files <changed files>
-```
-
-If BYOLSP reports a diagnostic, fix it before continuing.
-
-If a rule says an exception is allowed with a comment, only keep the violating
-code when the code is genuinely necessary and add a concise comment explaining why.
-"""
 
 GIT_HOOKS_NOTICE = (
     "Git hook shims are not implemented yet; rerun `byolsp init --git-hooks` "
@@ -100,9 +76,7 @@ def initialize_repo(
     if write_ignore_block(repo_root, options.ignore_mode):
         target = ignore_file(repo_root, options.ignore_mode).relative_to(repo_root)
         messages.append(f"Wrote ignore block to {target.as_posix()}")
-    instructions_message = _write_agent_instructions(repo_root)
-    if instructions_message is not None:
-        messages.append(instructions_message)
+    messages.extend(install_agent_instructions(repo_root, options.agents))
     if options.git_hooks:
         messages.append(GIT_HOOKS_NOTICE)
     if options.register and register_repo(
@@ -151,21 +125,6 @@ def _load_or_default_repo_config(repo_root: Path) -> RepoConfig:
         return load_repo_config(repo_root)
     except RepoNotInitialized:
         return RepoConfig()
-
-
-def _write_agent_instructions(repo_root: Path) -> str | None:
-    path = repo_root / Path(AGENT_INSTRUCTIONS_RELPATH)
-    if path.is_file():
-        existing = path.read_text(encoding="utf-8")
-        if MANAGED_MARKER not in existing:
-            return (
-                f"{AGENT_INSTRUCTIONS_RELPATH} exists without the BYOLSP marker; "
-                "left untouched."
-            )
-        if existing == GENERIC_AGENT_INSTRUCTIONS:
-            return None
-    write_text_atomic(path, GENERIC_AGENT_INSTRUCTIONS)
-    return f"Wrote {AGENT_INSTRUCTIONS_RELPATH}"
 
 
 def _options_from_args(args: argparse.Namespace) -> InitOptions:

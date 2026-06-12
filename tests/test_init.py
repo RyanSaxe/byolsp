@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
+from byolsp.agents import MANAGED_MARKER
 from byolsp.cli import main
 from byolsp.config import load_repo_config, load_repo_registry
 from byolsp.ignore import IGNORED_PATTERNS
-from byolsp.init import MANAGED_MARKER
 
 TRACKED_FILES = (
     "sgconfig.yml",
