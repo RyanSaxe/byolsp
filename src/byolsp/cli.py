@@ -6,8 +6,10 @@ import argparse
 import sys
 from collections.abc import Sequence
 from importlib.metadata import version
+from pathlib import Path
 
 from byolsp.errors import ByolspError
+from byolsp.init import run_init
 
 COMMANDS = {
     "init": "Initialize BYOLSP in a repository",
@@ -35,6 +37,8 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     for name, help_text in COMMANDS.items():
         command = subparsers.add_parser(name, help=help_text, description=help_text)
+        if name == "init":
+            _add_init_arguments(command)
         if name == "hook":
             actions = command.add_subparsers(dest="hook_action", required=True)
             actions.add_parser("install", help="Install agent integration files")
@@ -42,7 +46,45 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _add_init_arguments(command: argparse.ArgumentParser) -> None:
+    command.add_argument(
+        "--repo", type=Path, help="Repository root (default: search upward from cwd)"
+    )
+    command.add_argument(
+        "--agents",
+        help="Comma-separated AI integrations: generic, claude-code, codex, copilot",
+    )
+    command.add_argument(
+        "--ignore-mode",
+        choices=("project", "local"),
+        help="Write ignore entries to .gitignore (project) or .git/info/exclude (local)",
+    )
+    command.add_argument(
+        "--git-hooks",
+        action="store_true",
+        default=None,
+        help="Install post-merge/post-checkout shims that run `byolsp sync`",
+    )
+    command.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="Use defaults instead of prompting",
+    )
+    command.add_argument(
+        "--no-register",
+        action="store_true",
+        help="Skip registering this repository for `byolsp sync --all`",
+    )
+    command.add_argument(
+        "--replace-sgconfig",
+        action="store_true",
+        help="Overwrite sgconfig.yml after saving a timestamped backup",
+    )
+
+
 def run(args: argparse.Namespace) -> int:
+    if args.command == "init":
+        return run_init(args)
     raise ByolspError(f"'{args.command}' is not implemented yet")
 
 

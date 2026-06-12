@@ -1,0 +1,176 @@
+import io
+import sys
+from pathlib import Path
+
+import pytest
+
+from byolsp.cli import main
+from byolsp.config import load_repo_config, load_repo_registry
+from byolsp.ignore import IGNORED_PATTERNS
+from byolsp.init import MANAGED_MARKER
+
+TRACKED_FILES = (
+    "sgconfig.yml",
+    ".byolsp/config.yml",
+    ".byolsp/rules/project/.gitkeep",
+    ".byolsp/rules/personal/local/.gitkeep",
+    ".byolsp/rules/personal/global/.gitkeep",
+    ".byolsp/agents/README.md",
+)
+
+
+@pytest.fixture
+def repo(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """An empty repo dir, with the global config dir isolated under tmp_path."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    return repo
+
+
+def config_dir(repo: Path) -> Path:
+    return repo.parent / "xdg" / "byolsp"
+
+
+def init(repo: Path, *extra: str) -> int:
+    return main(["init", "--repo", str(repo), "--non-interactive", *extra])
+
+
+def test_init_creates_repository_and_global_layout(repo: Path) -> None:
+    assert init(repo) == 0
+
+    for relpath in TRACKED_FILES:
+        assert (repo / relpath).is_file(), relpath
+    assert (repo / ".byolsp" / "local.yml").is_file()
+    assert MANAGED_MARKER in (repo / ".byolsp" / "agents" / "README.md").read_text()
+
+    sgconfig = (repo / "sgconfig.yml").read_text()
+    for rule_dir in (
+        ".byolsp/rules/project",
+        ".byolsp/rules/personal/local",
+        ".byolsp/rules/personal/global",
+    ):
+        assert rule_dir in sgconfig
+
+    gitignore = (repo / ".gitignore").read_text()
+    assert all(pattern in gitignore for pattern in IGNORED_PATTERNS)
+
+    assert (config_dir(repo) / "config.yml").is_file()
+    assert (config_dir(repo) / "rules").is_dir()
+    assert load_repo_registry(config_dir(repo) / "repos.yml") == [repo.resolve()]
+
+
+def test_init_is_idempotent(repo: Path) -> None:
+    init(repo)
+    snapshot = {path: path.read_text() for path in repo.rglob("*") if path.is_file()}
+
+    assert init(repo) == 0
+
+    for path, content in snapshot.items():
+        assert path.read_text() == content, path
+    assert load_repo_registry(config_dir(repo) / "repos.yml") == [repo.resolve()]
+
+
+def test_init_preserves_existing_sgconfig_content(repo: Path) -> None:
+    (repo / "sgconfig.yml").write_text(
+        "# team config\nruleDirs:\n  - custom-rules\nutilDirs:\n  - utils\n"
+    )
+
+    assert init(repo) == 0
+
+    content = (repo / "sgconfig.yml").read_text()
+    assert "# team config" in content
+    assert "custom-rules" in content
+    assert "utils" in content
+    assert ".byolsp/rules/personal/global" in content
+
+
+def test_init_rejects_non_list_rule_dirs_without_traceback(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (repo / "sgconfig.yml").write_text("ruleDirs: not-a-list\n")
+
+    assert init(repo) == 1
+
+    captured = capsys.readouterr()
+    assert "expected ruleDirs to be a list" in captured.err
+    assert "--replace-sgconfig" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_replace_sgconfig_backs_up_then_overwrites(repo: Path) -> None:
+    (repo / "sgconfig.yml").write_text("ruleDirs: not-a-list\n")
+
+    assert init(repo, "--replace-sgconfig") == 0
+
+    backups = list(repo.glob("sgconfig.yml.byolsp-backup-*"))
+    assert len(backups) == 1
+    assert backups[0].read_text() == "ruleDirs: not-a-list\n"
+    assert ".byolsp/rules/project" in (repo / "sgconfig.yml").read_text()
+
+
+def test_local_ignore_mode_uses_git_info_exclude(repo: Path) -> None:
+    (repo / ".git").mkdir()
+
+    assert init(repo, "--ignore-mode", "local") == 0
+    assert init(repo, "--ignore-mode", "local") == 0
+
+    exclude = (repo / ".git" / "info" / "exclude").read_text()
+    assert exclude.count(".byolsp/local.yml") == 1
+    assert not (repo / ".gitignore").exists()
+
+
+def test_agents_are_recorded_and_merged_without_duplicates(repo: Path) -> None:
+    init(repo, "--agents", "claude-code,codex")
+    init(repo, "--agents", "claude-code,generic")
+
+    assert load_repo_config(repo).agents == ["claude-code", "codex", "generic"]
+
+
+def test_unknown_agent_fails_cleanly(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert init(repo, "--agents", "frobnicate") == 1
+    assert "Unknown agents: frobnicate" in capsys.readouterr().err
+
+
+def test_no_register_creates_empty_registry(repo: Path) -> None:
+    assert init(repo, "--no-register") == 0
+
+    assert load_repo_registry(config_dir(repo) / "repos.yml") == []
+
+
+def test_unmarked_agent_instructions_are_preserved(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    readme = repo / ".byolsp" / "agents" / "README.md"
+    readme.parent.mkdir(parents=True)
+    readme.write_text("my own notes\n")
+
+    assert init(repo) == 0
+
+    assert readme.read_text() == "my own notes\n"
+    assert "without the BYOLSP marker" in capsys.readouterr().out
+
+
+def test_git_hooks_flag_prints_not_implemented_notice(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert init(repo, "--git-hooks") == 0
+    assert "Git hook shims are not implemented yet" in capsys.readouterr().out
+
+
+def test_interactive_prompts_drive_agents_ignore_mode_and_hooks(
+    repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (repo / ".git").mkdir()
+    # Answers: agents -> claude-code, ignore mode -> local, git hooks -> yes.
+    monkeypatch.setattr(sys, "stdin", io.StringIO("2\n2\n2\n"))
+
+    assert main(["init", "--repo", str(repo)]) == 0
+
+    assert load_repo_config(repo).agents == ["claude-code"]
+    assert (repo / ".git" / "info" / "exclude").is_file()
+    assert "Git hook shims are not implemented yet" in capsys.readouterr().out
