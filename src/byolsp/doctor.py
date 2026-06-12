@@ -14,6 +14,7 @@ from byolsp.config import (
     RepoConfig,
     RepoPaths,
     load_global_config,
+    load_local_config,
     load_repo_config,
     load_repo_registry,
     repo_registry_path,
@@ -27,8 +28,8 @@ from byolsp.errors import (
     RuleValidationError,
 )
 from byolsp.paths import global_config_dir, resolve_repo_root
-from byolsp.rules import check_id_conflicts, load_rules
-from byolsp.sync import load_canonical_rules, repo_is_stale
+from byolsp.rules import load_rules
+from byolsp.sync import compute_sync_plan, load_canonical_rules, mirror_contents
 from byolsp.yamlio import load_yaml_mapping
 
 
@@ -147,12 +148,14 @@ def _rule_checks(repo_root: Path, paths: RepoPaths, config_dir: Path) -> list[Ch
         return [Check("rules_valid", False, str(error))]
     checks = [Check("rules_valid", True, "all rule files parse with required fields")]
     try:
-        check_id_conflicts(project, local, canonical.rules)
+        plan = compute_sync_plan(
+            project, local, load_local_config(repo_root).excluded_rule_ids, canonical
+        )
     except DuplicateRuleId as error:
         checks.append(Check("rule_ids_unique", False, str(error)))
         return checks
     checks.append(Check("rule_ids_unique", True, "effective rule IDs are unique"))
-    if repo_is_stale(repo_root, canonical):
+    if mirror_contents(repo_root / paths.personal_global_rules) != plan.desired:
         message = "global rule copies are stale; run `byolsp sync`"
         checks.append(Check("sync_fresh", False, message))
     else:

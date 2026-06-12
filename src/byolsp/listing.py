@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from byolsp.config import load_local_config, load_repo_config
+from byolsp.config import load_repo_config
 from byolsp.paths import global_config_dir, resolve_repo_root
 from byolsp.rules import load_rules
-from byolsp.sync import compute_sync_plan, load_canonical_rules
+from byolsp.sync import load_canonical_rules, repo_sync_plan
 
 ListScope = Literal["project", "local", "global", "effective", "all"]
 
@@ -69,13 +69,7 @@ def collect_rules(repo_root: Path, scope: ListScope) -> list[ListedRule]:
 
 def collect_skipped(repo_root: Path, config_dir: Path) -> list[tuple[str, str]]:
     """(rule ID, reason) for canonical global rules sync does not mirror."""
-    paths = load_repo_config(repo_root).paths
-    plan = compute_sync_plan(
-        repo_root / paths.project_rules,
-        repo_root / paths.personal_local_rules,
-        load_local_config(repo_root).excluded_rule_ids,
-        load_canonical_rules(config_dir),
-    )
+    plan, _ = repo_sync_plan(repo_root, load_canonical_rules(config_dir))
     return plan.skipped
 
 

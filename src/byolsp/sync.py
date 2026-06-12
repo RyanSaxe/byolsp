@@ -60,19 +60,17 @@ def load_canonical_rules(config_dir: Path) -> CanonicalRules:
 
 
 def compute_sync_plan(
-    project_rules_dir: Path,
-    local_rules_dir: Path,
+    project: list[Rule],
+    local: list[Rule],
     excluded_rule_ids: Iterable[str],
     canonical: CanonicalRules,
 ) -> SyncPlan:
-    """SPEC 13 steps 1-5: discover and validate rules, decide the mirror contents.
+    """SPEC 13 steps 3-5: validate the loaded rules, decide the mirror contents.
 
     Step 7 (combined effective IDs are unique) holds by construction: project
     and local IDs are unique and disjoint per check_id_conflicts, and every
     kept global rule has an ID outside both sets and unique among global rules.
     """
-    project = load_rules(project_rules_dir)
-    local = load_rules(local_rules_dir)
     check_id_conflicts(project, local, canonical.rules)
     project_ids = {rule.id for rule in project}
     local_ids = {rule.id for rule in local}
@@ -117,17 +115,29 @@ def mirror_global_rules(mirror_dir: Path, desired: dict[str, str]) -> MirrorResu
     return MirrorResult(written=written, removed=removed)
 
 
+def repo_sync_plan(repo_root: Path, canonical: CanonicalRules) -> tuple[SyncPlan, Path]:
+    """One repository's sync plan plus its mirror directory (SPEC 13 steps 1-5)."""
+    paths = load_repo_config(repo_root).paths
+    plan = compute_sync_plan(
+        load_rules(repo_root / paths.project_rules),
+        load_rules(repo_root / paths.personal_local_rules),
+        load_local_config(repo_root).excluded_rule_ids,
+        canonical,
+    )
+    return plan, repo_root / paths.personal_global_rules
+
+
 def sync_repo(
     repo_root: Path, canonical: CanonicalRules
 ) -> tuple[SyncPlan, MirrorResult]:
     """Sync one repository: compute the plan and mirror it into place."""
-    plan, mirror_dir = _repo_plan(repo_root, canonical)
+    plan, mirror_dir = repo_sync_plan(repo_root, canonical)
     return plan, mirror_global_rules(mirror_dir, plan.desired)
 
 
 def repo_is_stale(repo_root: Path, canonical: CanonicalRules) -> bool:
     """The cheap staleness check (SPEC 13): path and content comparison."""
-    plan, mirror_dir = _repo_plan(repo_root, canonical)
+    plan, mirror_dir = repo_sync_plan(repo_root, canonical)
     return mirror_contents(mirror_dir) != plan.desired
 
 
@@ -218,17 +228,6 @@ def _report_staleness(repo_root: Path, canonical: CanonicalRules) -> int:
         return STALE_EXIT_CODE
     print(f"Sync is fresh in {repo_root}")
     return 0
-
-
-def _repo_plan(repo_root: Path, canonical: CanonicalRules) -> tuple[SyncPlan, Path]:
-    paths = load_repo_config(repo_root).paths
-    plan = compute_sync_plan(
-        repo_root / paths.project_rules,
-        repo_root / paths.personal_local_rules,
-        load_local_config(repo_root).excluded_rule_ids,
-        canonical,
-    )
-    return plan, repo_root / paths.personal_global_rules
 
 
 def _skip_reason(
