@@ -34,7 +34,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     for name, help_text in COMMANDS.items():
-        subparsers.add_parser(name, help=help_text, description=help_text)
+        command = subparsers.add_parser(name, help=help_text, description=help_text)
+        if name == "hook":
+            actions = command.add_subparsers(dest="hook_action", required=True)
+            actions.add_parser("install", help="Install agent integration files")
+            actions.add_parser("uninstall", help="Remove BYOLSP-managed agent files")
     return parser
 
 

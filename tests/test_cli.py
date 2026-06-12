@@ -26,11 +26,17 @@ def test_unknown_command_exits_nonzero() -> None:
     assert excinfo.value.code != 0
 
 
-@pytest.mark.parametrize("command", sorted(COMMANDS))
+INVOCATIONS = [[name] for name in sorted(COMMANDS) if name != "hook"] + [
+    ["hook", "install"],
+    ["hook", "uninstall"],
+]
+
+
+@pytest.mark.parametrize("argv", INVOCATIONS, ids=" ".join)
 def test_command_is_registered_and_fails_cleanly(
-    command: str, capsys: pytest.CaptureFixture[str]
+    argv: list[str], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    exit_code = main([command])
+    exit_code = main(argv)
 
     captured = capsys.readouterr()
     assert exit_code == 1
