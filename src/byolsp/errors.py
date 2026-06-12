@@ -16,7 +16,7 @@ class RepoNotInitialized(ByolspError):
 
 
 class RuleValidationError(ByolspError):
-    """A rule file is missing required ast-grep fields or has wrongly typed values."""
+    """A rule file is invalid YAML or lacks the fields ast-grep requires."""
 
 
 class DuplicateRuleId(ByolspError):

@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from byolsp.config import RepoPaths
-from byolsp.errors import ConfigError, DuplicateRuleId, RuleValidationError
+from byolsp.errors import DuplicateRuleId, RuleValidationError
 from byolsp.rules import (
     ByolspMetadata,
     Rule,
@@ -101,8 +101,29 @@ def test_load_rule_names_file_on_invalid_yaml(tmp_path: Path) -> None:
     path = tmp_path / "invalid.yml"
     path.write_text("id: [unclosed\n")
 
-    with pytest.raises(ConfigError, match=r"invalid\.yml"):
+    with pytest.raises(RuleValidationError, match=r"invalid\.yml"):
         load_rule(path)
+
+
+def test_load_rule_degrades_malformed_metadata_to_defaults(tmp_path: Path) -> None:
+    """ast-grep ignores metadata, so a metadata typo must not break loading."""
+    path = tmp_path / "odd-metadata.yml"
+    path.write_text(
+        "id: odd-metadata\n"
+        "language: Python\n"
+        "message: Avoid this pattern.\n"
+        "rule:\n"
+        "  pattern: cast($TYPE, $VALUE)\n"
+        "metadata:\n"
+        "  byolsp:\n"
+        "    agent_prompt: Keep this prompt.\n"
+        "    allow_with_comment: sometimes\n"
+        "    tags: python\n"
+    )
+
+    rule = load_rule(path)
+
+    assert rule.byolsp == ByolspMetadata(agent_prompt="Keep this prompt.")
 
 
 def test_load_rules_parses_every_discovered_file(tmp_path: Path) -> None:

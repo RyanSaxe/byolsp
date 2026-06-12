@@ -11,7 +11,7 @@ from typing import Literal
 from ruamel.yaml.comments import CommentedMap
 
 from byolsp.config import RepoPaths
-from byolsp.errors import DuplicateRuleId, RuleValidationError
+from byolsp.errors import ConfigError, DuplicateRuleId, RuleValidationError
 from byolsp.yamlio import load_yaml_mapping
 
 RuleScope = Literal["project", "local", "global"]
@@ -56,8 +56,16 @@ def discover_rule_files(rules_dir: Path) -> list[Path]:
 
 
 def load_rule(path: Path) -> Rule:
-    """Minimally parse one rule file; every failure message names the file."""
-    data = load_yaml_mapping(path)
+    """Minimally parse one rule file; every failure message names the file.
+
+    Strict only about the fields ast-grep requires (SPEC 11.1). The optional
+    metadata.byolsp block degrades to defaults when malformed: ast-grep
+    ignores metadata, and deep validation is doctor's job (SPEC 15.4).
+    """
+    try:
+        data = load_yaml_mapping(path)
+    except ConfigError as error:
+        raise RuleValidationError(str(error)) from error
     missing = [name for name in REQUIRED_AST_GREP_FIELDS if data.get(name) is None]
     if missing:
         raise RuleValidationError(
@@ -70,8 +78,8 @@ def load_rule(path: Path) -> Rule:
         language=_string(data, "language", path),
         message=_string(data, "message", path),
         path=path,
-        severity=_optional_string(data, "severity", path),
-        byolsp=_byolsp_metadata(data, path),
+        severity=_lenient_string(data, "severity"),
+        byolsp=_byolsp_metadata(data),
     )
 
 
@@ -143,23 +151,18 @@ def _require_unique_ids(rules: list[Rule], where: str, hint: str | None = None) 
     raise DuplicateRuleId("\n".join(lines))
 
 
-def _byolsp_metadata(data: CommentedMap, path: Path) -> ByolspMetadata:
+def _byolsp_metadata(data: CommentedMap) -> ByolspMetadata:
+    """Lenient by design: a malformed metadata value degrades to its default."""
     metadata = data.get("metadata")
-    if metadata is None:
-        return ByolspMetadata()
-    if not isinstance(metadata, CommentedMap):
-        raise RuleValidationError(f"{path}: expected 'metadata' to be a mapping")
-    block = metadata.get("byolsp")
-    if block is None:
-        return ByolspMetadata()
+    block = metadata.get("byolsp") if isinstance(metadata, CommentedMap) else None
     if not isinstance(block, CommentedMap):
-        raise RuleValidationError(f"{path}: expected 'metadata.byolsp' to be a mapping")
+        return ByolspMetadata()
     return ByolspMetadata(
-        rationale=_optional_string(block, "rationale", path),
-        agent_prompt=_optional_string(block, "agent_prompt", path),
-        allow_with_comment=_bool(block, "allow_with_comment", path),
-        docs_url=_optional_string(block, "docs_url", path),
-        tags=_string_list(block, "tags", path),
+        rationale=_lenient_string(block, "rationale"),
+        agent_prompt=_lenient_string(block, "agent_prompt"),
+        allow_with_comment=block.get("allow_with_comment") is True,
+        docs_url=_lenient_string(block, "docs_url"),
+        tags=_lenient_string_list(block, "tags"),
     )
 
 
@@ -170,33 +173,13 @@ def _string(section: CommentedMap, key: str, path: Path) -> str:
     return value
 
 
-def _optional_string(section: CommentedMap, key: str, path: Path) -> str | None:
+def _lenient_string(section: CommentedMap, key: str) -> str | None:
     value = section.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise RuleValidationError(f"{path}: expected '{key}' to be a string")
-    return value
+    return value if isinstance(value, str) else None
 
 
-def _bool(section: CommentedMap, key: str, path: Path) -> bool:
-    value = section.get(key, False)
-    if not isinstance(value, bool):
-        raise RuleValidationError(f"{path}: expected '{key}' to be a boolean")
-    return value
-
-
-def _string_list(section: CommentedMap, key: str, path: Path) -> list[str]:
+def _lenient_string_list(section: CommentedMap, key: str) -> list[str]:
     value = section.get(key)
-    if value is None:
-        return []
     if not isinstance(value, list):
-        raise RuleValidationError(f"{path}: expected '{key}' to be a list of strings")
-    items: list[str] = []
-    for item in value:
-        if not isinstance(item, str):
-            raise RuleValidationError(
-                f"{path}: expected '{key}' to be a list of strings"
-            )
-        items.append(item)
-    return items
+        return []
+    return [item for item in value if isinstance(item, str)]
