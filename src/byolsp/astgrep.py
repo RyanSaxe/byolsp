@@ -54,7 +54,11 @@ def resolve_ast_grep(command: str = "auto") -> Path:
 
 @dataclass
 class ScanMatch:
-    """One `ast-grep scan` match; line and column are 0-based as reported."""
+    """One `ast-grep scan` match; line and column are 0-based as reported.
+
+    Deliberately raw ast-grep output (SPEC 20 keeps this module isolated):
+    rendering transforms live with the consumer, in agent_check.Diagnostic.
+    """
 
     file: str
     line: int

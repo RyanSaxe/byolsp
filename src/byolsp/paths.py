@@ -14,6 +14,14 @@ def global_config_dir() -> Path:
     return Path.home() / ".config" / "byolsp"
 
 
+def display_path(path: Path, repo_root: Path) -> str:
+    """Repo-relative POSIX for paths inside the repo, as given otherwise."""
+    try:
+        return path.relative_to(repo_root).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def resolve_repo_root(explicit: Path | None = None, start: Path | None = None) -> Path:
     """Resolve the repository root for repo-operating commands.
 

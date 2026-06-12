@@ -210,6 +210,7 @@ def _add_agent_check_arguments(command: argparse.ArgumentParser) -> None:
         "--files",
         nargs="+",
         type=Path,
+        default=(),
         metavar="FILE",
         help="Files to scan (default: the whole repository)",
     )

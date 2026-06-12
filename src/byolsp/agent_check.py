@@ -10,7 +10,7 @@ from pathlib import Path
 
 from byolsp.astgrep import ScanMatch, resolve_ast_grep, scan_files
 from byolsp.config import load_global_config
-from byolsp.paths import global_config_dir, resolve_repo_root
+from byolsp.paths import display_path, global_config_dir, resolve_repo_root
 
 DIAGNOSTICS_EXIT_CODE = 2
 DEFAULT_RENDER_LIMIT = 20
@@ -35,7 +35,7 @@ def run_agent_check(args: argparse.Namespace) -> int:
     repo_root = resolve_repo_root(explicit=args.repo)
     config_dir = global_config_dir()
     executable = resolve_ast_grep(load_global_config(config_dir).ast_grep_command)
-    files = [Path(file).resolve() for file in args.files or []]
+    files = [file.resolve() for file in args.files]
     result = scan_files(executable, repo_root, files, max_results=args.max_results)
     if result.warnings:
         print(result.warnings, file=sys.stderr)
@@ -56,7 +56,7 @@ def collect_diagnostics(matches: list[ScanMatch], repo_root: Path) -> list[Diagn
     """1-based diagnostics grouped by file, sorted by line then rule ID."""
     diagnostics = [
         Diagnostic(
-            file=_display_path(match.file, repo_root),
+            file=display_path(Path(match.file), repo_root),
             line=match.line + 1,
             column=match.column + 1,
             rule_id=match.rule_id,
@@ -97,11 +97,3 @@ def render_diagnostics(diagnostics: list[Diagnostic], limit: int) -> list[str]:
             " Run ast-grep scan for the full list.",
         ]
     return lines
-
-
-def _display_path(file: str, repo_root: Path) -> str:
-    """Repo-relative POSIX for paths inside the repo, as reported otherwise."""
-    try:
-        return Path(file).relative_to(repo_root).as_posix()
-    except ValueError:
-        return file

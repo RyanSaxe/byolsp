@@ -21,7 +21,7 @@ from byolsp.config import (
 from byolsp.doctor import quick_doctor_problems
 from byolsp.errors import ByolspError, ConfigError, UnsafeOverwrite
 from byolsp.fsio import write_text_atomic
-from byolsp.paths import global_config_dir, resolve_repo_root
+from byolsp.paths import display_path, global_config_dir, resolve_repo_root
 from byolsp.rules import (
     Rule,
     RuleScope,
@@ -98,7 +98,7 @@ def run_add(args: argparse.Namespace) -> int:
         destination = _scope_dir(context, scope) / f"{rule.id}.yml"
         if destination.exists():
             raise UnsafeOverwrite(
-                f"{_display(destination, context)} already exists; "
+                f"{display_path(destination, context.repo_root)} already exists; "
                 f"use `byolsp edit {rule.id}` to change it."
             )
         rule = replace(rule, path=destination)
@@ -109,7 +109,10 @@ def run_add(args: argparse.Namespace) -> int:
         draft.unlink()
     _warn_on_id_pattern(rule)
     write_text_atomic(destination, rule.content)
-    print(f"Added {scope} rule '{rule.id}' at {_display(destination, context)}")
+    print(
+        f"Added {scope} rule '{rule.id}' "
+        f"at {display_path(destination, context.repo_root)}"
+    )
     _finish(context, fan_out=scope == "global")
     return 0
 
@@ -129,7 +132,10 @@ def run_edit(args: argparse.Namespace) -> int:
     draft.unlink()
     _warn_on_id_pattern(rule)
     write_text_atomic(found.path, rule.content)
-    print(f"Updated {scope} rule '{rule.id}' at {_display(found.path, context)}")
+    print(
+        f"Updated {scope} rule '{rule.id}' "
+        f"at {display_path(found.path, context.repo_root)}"
+    )
     _finish(context, fan_out=scope == "global")
     return 0
 
@@ -143,7 +149,7 @@ def run_promote(args: argparse.Namespace) -> int:
     destination = project_dir / rule.path.relative_to(source_dir)
     if destination.exists() and not args.replace:
         raise UnsafeOverwrite(
-            f"{_display(destination, context)} already exists; "
+            f"{display_path(destination, context.repo_root)} already exists; "
             "rerun with --replace to overwrite it."
         )
     # SPEC 14 conflict check on the post-promote state, before any write. With
@@ -155,7 +161,7 @@ def run_promote(args: argparse.Namespace) -> int:
     write_text_atomic(destination, rule.content)
     if remove_source:
         rule.path.unlink()
-    print(f"Promoted '{rule.id}' to {_display(destination, context)}")
+    print(f"Promoted '{rule.id}' to {display_path(destination, context.repo_root)}")
     _finish(context, fan_out=False)
     return 0
 
@@ -294,14 +300,6 @@ def _scope_dir(context: RepoContext, scope: RuleScope) -> Path:
     return scope_rules_dir(
         scope, context.repo_root, context.paths, context.canonical.root
     )
-
-
-def _display(path: Path, context: RepoContext) -> str:
-    """Repo-relative POSIX for paths inside the repo, absolute otherwise."""
-    try:
-        return path.relative_to(context.repo_root).as_posix()
-    except ValueError:
-        return str(path)
 
 
 def _finish(context: RepoContext, fan_out: bool) -> None:
