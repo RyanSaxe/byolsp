@@ -10,19 +10,12 @@ from pathlib import Path
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
 from ruamel.yaml.error import YAMLError
-from ruamel.yaml.nodes import ScalarNode
-from ruamel.yaml.representer import RoundTripRepresenter
+from ruamel.yaml.representer import SafeRepresenter
 
 from byolsp.errors import ConfigError
 
 # Wide enough that ruamel never rewraps long values like agent prompts.
 YAML_LINE_WIDTH = 4096
-
-
-def _represent_none_as_null(
-    representer: RoundTripRepresenter, value: None
-) -> ScalarNode:
-    return representer.represent_scalar("tag:yaml.org,2002:null", "null")
 
 
 def new_yaml() -> YAML:
@@ -31,7 +24,8 @@ def new_yaml() -> YAML:
     yaml.preserve_quotes = True
     yaml.width = YAML_LINE_WIDTH
     yaml.indent(mapping=2, sequence=4, offset=2)
-    yaml.representer.add_representer(type(None), _represent_none_as_null)
+    # The round-trip default emits None as an empty scalar; spell it `null`.
+    yaml.representer.add_representer(type(None), SafeRepresenter.represent_none)
     return yaml
 
 

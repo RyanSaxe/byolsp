@@ -98,12 +98,11 @@ def test_global_paths_resolve_relative_to_config_dir_unless_absolute(
 
 
 def test_register_repo_creates_registry_and_is_idempotent(tmp_path: Path) -> None:
-    config_dir = tmp_path / "config" / "byolsp"
+    registry_path = tmp_path / "config" / "byolsp" / "repos.yml"
     repo = tmp_path / "repo"
     repo.mkdir()
 
-    assert register_repo(repo, config_dir) is True
-    assert register_repo(repo, config_dir) is False
+    assert register_repo(repo, registry_path) is True
+    assert register_repo(repo, registry_path) is False
 
-    registry = load_repo_registry(config_dir / "repos.yml")
-    assert registry.repos == [repo.resolve()]
+    assert load_repo_registry(registry_path) == [repo.resolve()]

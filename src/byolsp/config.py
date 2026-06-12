@@ -51,13 +51,6 @@ class GlobalConfig:
     ast_grep_command: str = "auto"
 
 
-@dataclass
-class RepoRegistry:
-    """Absolute roots of repositories registered for `sync --all`."""
-
-    repos: list[Path] = field(default_factory=list)
-
-
 def repo_config_path(repo_root: Path) -> Path:
     return repo_root / ".byolsp" / "config.yml"
 
@@ -71,11 +64,11 @@ def global_config_path(config_dir: Path) -> Path:
 
 
 def global_rules_dir(config_dir: Path, config: GlobalConfig) -> Path:
-    return _resolve_under(config_dir, config.rules_path)
+    return config_dir / config.rules_path
 
 
 def repo_registry_path(config_dir: Path, config: GlobalConfig) -> Path:
-    return _resolve_under(config_dir, config.repos_path)
+    return config_dir / config.repos_path
 
 
 def load_repo_config(repo_root: Path) -> RepoConfig:
@@ -169,38 +162,31 @@ def save_global_config(config_dir: Path, config: GlobalConfig) -> None:
     write_yaml_atomic(global_config_path(config_dir), data)
 
 
-def load_repo_registry(path: Path) -> RepoRegistry:
+def load_repo_registry(path: Path) -> list[Path]:
+    """Load the absolute repo roots registered for `sync --all`."""
     if not path.is_file():
-        return RepoRegistry()
+        return []
     data = load_yaml_mapping(path)
     _check_version(data, path)
-    return RepoRegistry(
-        repos=[Path(entry) for entry in _string_list(data, "repos", path)]
-    )
+    return [Path(entry) for entry in _string_list(data, "repos", path)]
 
 
-def save_repo_registry(path: Path, registry: RepoRegistry) -> None:
+def save_repo_registry(path: Path, repos: list[Path]) -> None:
     data = CommentedMap()
     data["version"] = CONFIG_VERSION
-    data["repos"] = [str(repo) for repo in registry.repos]
+    data["repos"] = [str(repo) for repo in repos]
     write_yaml_atomic(path, data)
 
 
-def register_repo(repo_root: Path, config_dir: Path) -> bool:
+def register_repo(repo_root: Path, registry_path: Path) -> bool:
     """Record repo_root in the global registry. Returns True when newly added."""
-    registry_path = repo_registry_path(config_dir, load_global_config(config_dir))
-    registry = load_repo_registry(registry_path)
+    repos = load_repo_registry(registry_path)
     resolved = repo_root.resolve()
-    if resolved in registry.repos:
+    if resolved in repos:
         return False
-    registry.repos.append(resolved)
-    save_repo_registry(registry_path, registry)
+    repos.append(resolved)
+    save_repo_registry(registry_path, repos)
     return True
-
-
-def _resolve_under(config_dir: Path, value: str) -> Path:
-    path = Path(value)
-    return path if path.is_absolute() else config_dir / path
 
 
 def _check_version(data: CommentedMap, path: Path) -> None:
