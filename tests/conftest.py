@@ -47,19 +47,16 @@ def mirror(repo: Path) -> Path:
 
 
 def make_editor(directory: Path, content: str) -> str:
-    """An $EDITOR value whose script replaces the edited file with `content`.
+    """An $EDITOR value whose command replaces the edited file with `content`.
 
     Deliberately multi-word so it exercises the shlex.split contract (SPEC 19).
     """
     source = directory / "editor-replacement.yml"
     source.write_text(content)
-    script = directory / "fake-editor.py"
-    script.write_text(
-        "import sys\n"
-        "from pathlib import Path\n"
-        "Path(sys.argv[2]).write_text(Path(sys.argv[1]).read_text())\n"
+    copy_into_edited_file = (
+        "import shutil, sys; shutil.copyfile(sys.argv[1], sys.argv[2])"
     )
-    return shlex.join([sys.executable, str(script), str(source)])
+    return shlex.join([sys.executable, "-c", copy_into_edited_file, str(source)])
 
 
 def noop_editor() -> str:
