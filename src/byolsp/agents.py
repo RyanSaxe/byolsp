@@ -107,11 +107,23 @@ def install_agent(repo_root: Path, agent: str) -> list[str]:
         return _install_claude_code(repo_root)
     if agent == "skill":
         return _install_skill(repo_root)
+    messages: list[str] = []
     if agent == "opencode":
-        return _install_opencode(repo_root)
-    return _write_managed_file(
-        repo_root, _instructions_relpath(agent), _agent_instructions(agent)
+        # A real post-edit plugin on top of the instruction file (SPEC 27.3).
+        messages.extend(
+            _write_managed_file(
+                repo_root,
+                OPENCODE_PLUGIN_RELPATH,
+                OPENCODE_PLUGIN,
+                marker=OPENCODE_MARKER,
+            )
+        )
+    messages.extend(
+        _write_managed_file(
+            repo_root, _instructions_relpath(agent), _agent_instructions(agent)
+        )
     )
+    return messages
 
 
 def uninstall_agent(repo_root: Path, agent: str) -> list[str]:
@@ -142,8 +154,8 @@ def agent_file_problems(repo_root: Path, agents: Sequence[str]) -> list[str]:
             continue
         if agent == "claude-code" and _claude_code_installed(repo_root):
             continue
-        if agent == "opencode" and not (repo_root / OPENCODE_PLUGIN_RELPATH).is_file():
-            problems.append(f"{OPENCODE_PLUGIN_RELPATH} is missing")
+        if agent == "opencode":
+            problems.extend(_opencode_plugin_problems(repo_root))
         relpath = _instructions_relpath(agent)
         if not (repo_root / relpath).is_file():
             problems.append(f"{relpath} is missing")
@@ -158,19 +170,18 @@ def _install_skill(repo_root: Path) -> list[str]:
     return messages
 
 
-def _install_opencode(repo_root: Path) -> list[str]:
-    """A real post-edit plugin plus the standard instruction file (SPEC 27.3)."""
-    messages = _write_managed_file(
-        repo_root, OPENCODE_PLUGIN_RELPATH, OPENCODE_PLUGIN, marker=OPENCODE_MARKER
+def _opencode_plugin_problems(repo_root: Path) -> list[str]:
+    """Same ownership rules as the skill renders: drifted marker-bearing
+    plugins need a reinstall; unmarked files are user-owned and accepted.
+    """
+    status = marked_text_status(
+        repo_root / OPENCODE_PLUGIN_RELPATH, OPENCODE_PLUGIN, OPENCODE_MARKER
     )
-    messages.extend(
-        _write_managed_file(
-            repo_root,
-            _instructions_relpath("opencode"),
-            _agent_instructions("opencode"),
-        )
-    )
-    return messages
+    if status == "missing":
+        return [f"{OPENCODE_PLUGIN_RELPATH} is missing"]
+    if status == "drifted":
+        return [f"{OPENCODE_PLUGIN_RELPATH} is out of date"]
+    return []
 
 
 def _skill_render_problems(repo_root: Path) -> list[str]:

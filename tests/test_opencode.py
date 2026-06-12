@@ -47,15 +47,18 @@ def test_uninstall_removes_only_marker_bearing_files(
     assert "opencode" not in load_repo_config(repo).agents
 
 
-def test_doctor_flags_a_missing_plugin_and_install_repairs_it(
+def test_doctor_flags_a_missing_or_drifted_plugin_and_install_repairs_it(
     home: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     repo = make_repo(home, "repo", "--agents", "opencode")
-    (repo / OPENCODE_PLUGIN_RELPATH).unlink()
-    capsys.readouterr()
+    plugin = repo / OPENCODE_PLUGIN_RELPATH
 
-    assert main(["doctor", "--repo", str(repo), "--quick"]) == 1
-    assert OPENCODE_PLUGIN_RELPATH in capsys.readouterr().out
+    for breakage in (plugin.unlink, lambda: plugin.write_text(OPENCODE_MARKER + "\n")):
+        breakage()
+        capsys.readouterr()
+        assert main(["doctor", "--repo", str(repo), "--quick"]) == 1
+        assert OPENCODE_PLUGIN_RELPATH in capsys.readouterr().out
 
-    assert main(["hook", "install", "--repo", str(repo), "--agent", "opencode"]) == 0
-    assert main(["doctor", "--repo", str(repo), "--quick"]) == 0
+        cmd = ["hook", "install", "--repo", str(repo), "--agent", "opencode"]
+        assert main(cmd) == 0
+        assert main(["doctor", "--repo", str(repo), "--quick"]) == 0
