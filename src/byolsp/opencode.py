@@ -9,9 +9,11 @@ valid TypeScript (SPEC 17).
 
 from __future__ import annotations
 
+from byolsp.fsio import MANAGED_NOTICE
+
 OPENCODE_PLUGIN_RELPATH = ".opencode/plugin/byolsp.ts"
 
-OPENCODE_MARKER = "// Managed by BYOLSP. Manual edits may be overwritten."
+OPENCODE_MARKER = f"// {MANAGED_NOTICE}"
 
 OPENCODE_PLUGIN = (
     OPENCODE_MARKER

@@ -10,7 +10,11 @@ from typing import Literal
 
 NEW_FILE_MODE = 0o666
 
-MANAGED_MARKER = "<!-- Managed by BYOLSP. Manual edits may be overwritten. -->"
+# The notice is load-bearing for ownership detection (SPEC 17); markers in
+# other comment dialects must derive from it so they stay in lockstep.
+MANAGED_NOTICE = "Managed by BYOLSP. Manual edits may be overwritten."
+
+MANAGED_MARKER = f"<!-- {MANAGED_NOTICE} -->"
 
 MarkedWriteResult = Literal["written", "unchanged", "unmarked"]
 
