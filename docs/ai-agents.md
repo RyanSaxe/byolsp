@@ -141,8 +141,11 @@ which together cover every major harness natively:
 
 `byolsp init` installs both renders by default;
 `byolsp hook install --agent skill` and `hook uninstall --agent skill` manage
-them explicitly. `doctor` checks both renders exist and match the packaged
-content when `skill` is in `ai.agents`.
+them explicitly. Both renders are marker-managed: an unmarked file you placed
+at either path is never overwritten by init or hook install. `doctor` checks
+both renders exist and match the packaged content when `skill` is in
+`ai.agents`; a render without the BYOLSP marker is treated as user-owned and
+accepted as is.
 
 ### opencode
 
@@ -155,9 +158,10 @@ code appends nothing, so a byolsp configuration error never breaks the agent
 loop.
 
 Install also writes the standard instruction file `.byolsp/agents/opencode.md`,
-which tells the model the plugin already covers those three tools and to run
-`agent-check` manually only for files changed another way (for example via
-shell commands).
+which tells the model the plugin covers `edit`, `write`, and `apply_patch`
+calls that name a single `filePath` (a multi-file `apply_patch` is skipped)
+and to run `agent-check` manually for files changed another way (for example
+via shell commands).
 
 ### claude-code
 

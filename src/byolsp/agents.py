@@ -226,10 +226,10 @@ INSTRUCTION_AGENT_NOTES = {
         "OpenCode",
         "The BYOLSP plugin at\n"
         f"`{OPENCODE_PLUGIN_RELPATH}` hooks `tool.execute.after` and appends\n"
-        "diagnostics automatically when you change files with the `edit`,\n"
-        "`write`, or `apply_patch` tools — do not rerun `agent-check` for\n"
-        "those. Run the command above only for files changed another way\n"
-        "(for example via shell commands).",
+        "diagnostics automatically when an `edit`, `write`, or `apply_patch`\n"
+        "call names a single `filePath` — do not rerun `agent-check` for\n"
+        "those. Run the command above for files changed another way (a\n"
+        "multi-file `apply_patch`, or shell commands).",
     ),
 }
 
