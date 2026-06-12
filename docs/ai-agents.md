@@ -103,6 +103,10 @@ anything you edited (the marker removed) is preserved with a message.
 | `opencode` | Real post-edit plugin `.opencode/plugin/byolsp.ts` plus instruction file `.byolsp/agents/opencode.md` |
 | `skill` | Rule-capture skill rendered identically into `.agents/skills/byolsp/SKILL.md` and `.claude/skills/byolsp/SKILL.md`; installed by `init` by default |
 
+Codex, Copilot, and OpenCode auto-discover the `byolsp` rule-capture skill
+from `.agents/skills/byolsp/SKILL.md`, so all three get the capture loop
+natively; their instruction files say so.
+
 ### skill
 
 The rule-capture skill teaches agents to *create* rules from your feedback,

@@ -204,12 +204,13 @@ def _agent_instructions(agent: str) -> str:
         "codex": (
             "Codex reads repository guidance from `AGENTS.md`. Copy the\n"
             "instruction above into `AGENTS.md` so Codex checks its changes\n"
-            "automatically."
+            f"automatically.\n\n{SKILL_DISCOVERY_NOTE.format(harness='Codex')}"
         ),
         "copilot": (
             "GitHub Copilot reads repository guidance from\n"
             "`.github/copilot-instructions.md`. Copy the instruction above into\n"
-            "that file so Copilot checks its changes automatically."
+            "that file so Copilot checks its changes automatically.\n\n"
+            f"{SKILL_DISCOVERY_NOTE.format(harness='Copilot')}"
         ),
         "opencode": (
             "OpenCode runs the check automatically: the BYOLSP plugin at\n"

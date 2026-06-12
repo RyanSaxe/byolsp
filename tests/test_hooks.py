@@ -24,6 +24,9 @@ def test_init_installs_instruction_files_for_requested_agents(home: Path) -> Non
         content = (repo / AGENTS_DIR / name).read_text()
         assert MANAGED_MARKER in content
         assert "byolsp agent-check --files <changed files>" in content
+        # SPEC 27.4: both harnesses auto-discover the rule-capture skill.
+        assert "`byolsp` rule-capture skill" in content
+        assert ".agents/skills/byolsp" in content
 
 
 def test_claude_code_without_claude_dir_writes_wiring_instructions(home: Path) -> None:
