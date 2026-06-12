@@ -7,8 +7,9 @@ from byolsp.astgrep import (
     VERSION_PATTERN,
     ast_grep_version,
     resolve_ast_grep,
+    scan_files,
 )
-from byolsp.errors import AstGrepNotFound
+from byolsp.errors import AstGrepNotFound, ByolspError
 
 
 def fake_executable(path: Path, script: str = 'echo "ast-grep 9.9.9"') -> Path:
@@ -82,3 +83,58 @@ def test_unreadable_version_fails_cleanly(bin_dir: Path) -> None:
 
     with pytest.raises(AstGrepNotFound, match="could not read an ast-grep version"):
         ast_grep_version(broken)
+
+
+CAST_RULE = (
+    "id: no-python-cast\n"
+    "language: Python\n"
+    "severity: warning\n"
+    "message: Avoid typing.cast in Python code.\n"
+    "rule:\n"
+    "  pattern: cast($TYPE, $VALUE)\n"
+    "metadata:\n"
+    "  byolsp:\n"
+    "    agent_prompt: Fix the type by narrowing instead.\n"
+)
+
+
+def ast_grep_project(root: Path, rule: str = CAST_RULE) -> Path:
+    (root / "sgconfig.yml").write_text("ruleDirs:\n  - rules\n")
+    (root / "rules").mkdir()
+    (root / "rules" / "rule.yml").write_text(rule)
+    return root
+
+
+def test_scan_parses_matches_with_metadata(tmp_path: Path) -> None:
+    project = ast_grep_project(tmp_path)
+    (project / "src.py").write_text('x = cast(int, "1")\n')
+
+    result = scan_files(resolve_ast_grep(), project, [project / "src.py"])
+
+    assert result.warnings == ""
+    (match,) = result.matches
+    assert match.file == str(project / "src.py")
+    assert (match.line, match.column) == (0, 4)  # 0-based, as ast-grep reports
+    assert match.rule_id == "no-python-cast"
+    assert match.severity == "warning"
+    assert match.message == "Avoid typing.cast in Python code."
+    assert match.lines == 'x = cast(int, "1")'
+    assert match.agent_prompt == "Fix the type by narrowing instead."
+
+
+def test_scan_without_metadata_yields_no_agent_prompt(tmp_path: Path) -> None:
+    rule = CAST_RULE.split("metadata:\n")[0]
+    project = ast_grep_project(tmp_path, rule=rule)
+    (project / "src.py").write_text("x = cast(int, 1)\n")
+
+    result = scan_files(resolve_ast_grep(), project, [project / "src.py"])
+
+    assert result.matches[0].agent_prompt is None
+
+
+def test_scan_failure_raises_with_ast_grep_message(tmp_path: Path) -> None:
+    (tmp_path / "sgconfig.yml").write_text("ruleDirs: 5\n")
+    (tmp_path / "src.py").write_text("x = 1\n")
+
+    with pytest.raises(ByolspError, match="scan` failed"):
+        scan_files(resolve_ast_grep(), tmp_path, [tmp_path / "src.py"])

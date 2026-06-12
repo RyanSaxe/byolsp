@@ -7,13 +7,16 @@ calls pass argv lists, never shell strings (SPEC 19).
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
 import subprocess
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
-from byolsp.errors import AstGrepNotFound
+from byolsp.errors import AstGrepNotFound, ByolspError
 
 NOT_FOUND_MESSAGE = (
     "ast-grep is required but was not found.\n"
@@ -49,6 +52,63 @@ def resolve_ast_grep(command: str = "auto") -> Path:
     raise AstGrepNotFound(NOT_FOUND_MESSAGE)
 
 
+@dataclass
+class ScanMatch:
+    """One `ast-grep scan` match; line and column are 0-based as reported."""
+
+    file: str
+    line: int
+    column: int
+    rule_id: str
+    severity: str
+    message: str
+    lines: str
+    """The full source line(s) the match spans."""
+
+    agent_prompt: str | None
+    """metadata.byolsp.agent_prompt, when the rule carries one."""
+
+
+@dataclass
+class ScanResult:
+    matches: list[ScanMatch]
+    warnings: str
+    """ast-grep's stderr (e.g. an unreadable file); empty when clean."""
+
+
+def scan_files(
+    executable: Path,
+    repo_root: Path,
+    files: Sequence[Path],
+    max_results: int | None = None,
+) -> ScanResult:
+    """Run `ast-grep scan --json` from repo_root and parse the matches.
+
+    With no `files`, ast-grep scans the whole repository. The exit code is
+    ignored when stdout is valid JSON (error-severity matches make ast-grep
+    exit nonzero); unparseable output raises ByolspError with ast-grep's
+    own message (SPEC 15.9 tool error).
+    """
+    argv = [
+        str(executable),
+        "scan",
+        "--json=compact",
+        "--include-metadata",
+        "--color",
+        "never",
+    ]
+    if max_results is not None:
+        argv.extend(["--max-results", str(max_results)])
+    argv.extend(str(file) for file in files)
+    result = subprocess.run(argv, capture_output=True, text=True, cwd=repo_root)
+    matches = _parse_scan_output(result.stdout)
+    if matches is None:
+        detail = result.stderr.strip() or result.stdout.strip()
+        message = f"`{executable.name} scan` failed (exit {result.returncode})"
+        raise ByolspError(f"{message}:\n{detail}" if detail else message)
+    return ScanResult(matches=matches, warnings=result.stderr.strip())
+
+
 def ast_grep_version(executable: Path) -> str:
     """The version `executable --version` reports, e.g. '0.43.0'."""
     try:
@@ -65,3 +125,58 @@ def ast_grep_version(executable: Path) -> str:
             f"could not read an ast-grep version from `{executable} --version`"
         )
     return match.group(0)
+
+
+def _parse_scan_output(stdout: str) -> list[ScanMatch] | None:
+    """Parse scan stdout into matches; None when it is not a JSON match list."""
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, list):
+        return None
+    matches: list[ScanMatch] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            return None
+        matches.append(_parse_match(item))
+    return matches
+
+
+def _parse_match(match: dict[str, object]) -> ScanMatch:
+    line, column = _start_position(match)
+    return ScanMatch(
+        file=_string_field(match, "file"),
+        line=line,
+        column=column,
+        rule_id=_string_field(match, "ruleId"),
+        severity=_string_field(match, "severity"),
+        message=_string_field(match, "message"),
+        lines=_string_field(match, "lines"),
+        agent_prompt=_agent_prompt(match),
+    )
+
+
+def _string_field(match: dict[str, object], key: str) -> str:
+    value = match.get(key)
+    if not isinstance(value, str):
+        raise ByolspError(f"unexpected ast-grep scan JSON: missing '{key}'")
+    return value
+
+
+def _start_position(match: dict[str, object]) -> tuple[int, int]:
+    span = match.get("range")
+    start = span.get("start") if isinstance(span, dict) else None
+    line = start.get("line") if isinstance(start, dict) else None
+    column = start.get("column") if isinstance(start, dict) else None
+    if not isinstance(line, int) or not isinstance(column, int):
+        raise ByolspError("unexpected ast-grep scan JSON: missing 'range.start'")
+    return line, column
+
+
+def _agent_prompt(match: dict[str, object]) -> str | None:
+    """metadata.byolsp.agent_prompt; lenient because metadata is optional."""
+    metadata = match.get("metadata")
+    byolsp = metadata.get("byolsp") if isinstance(metadata, dict) else None
+    prompt = byolsp.get("agent_prompt") if isinstance(byolsp, dict) else None
+    return prompt if isinstance(prompt, str) else None
