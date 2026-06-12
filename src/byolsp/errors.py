@@ -7,6 +7,10 @@ class ByolspError(Exception):
     exit_code: int = 1
 
 
+class AstGrepNotFound(ByolspError):
+    """No usable ast-grep executable could be resolved (SPEC section 5)."""
+
+
 class ConfigError(ByolspError):
     """A config file is malformed, has the wrong shape, or an unsupported version."""
 
