@@ -16,7 +16,9 @@ TRACKED_FILES = (
     ".byolsp/config.yml",
     ".byolsp/rules/project/.gitkeep",
     ".byolsp/rules/personal/local/.gitkeep",
+    ".byolsp/rules/personal/local/.ignore",
     ".byolsp/rules/personal/global/.gitkeep",
+    ".byolsp/rules/personal/global/.ignore",
     ".byolsp/agents/README.md",
 )
 

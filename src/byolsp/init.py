@@ -29,7 +29,12 @@ from byolsp.config import (
 from byolsp.doctor import quick_doctor_problems
 from byolsp.errors import ConfigError, RepoNotInitialized
 from byolsp.githooks import install_git_shims
-from byolsp.ignore import IgnoreMode, ignore_file, write_ignore_block
+from byolsp.ignore import (
+    IgnoreMode,
+    ignore_file,
+    write_ignore_block,
+    write_rule_visibility_file,
+)
 from byolsp.paths import global_config_dir, resolve_repo_root
 from byolsp.sgconfig import ensure_rule_dirs
 from byolsp.sync import load_canonical_rules, summarize_changes, sync_repo
@@ -114,6 +119,11 @@ def _ensure_repo_layout(repo_root: Path, agents: list[str]) -> RepoConfig:
         gitkeep = repo_root / rules_dir / ".gitkeep"
         gitkeep.parent.mkdir(parents=True, exist_ok=True)
         gitkeep.touch(exist_ok=True)
+    for personal_dir in (
+        config.paths.personal_local_rules,
+        config.paths.personal_global_rules,
+    ):
+        write_rule_visibility_file(repo_root / personal_dir)
     return config
 
 

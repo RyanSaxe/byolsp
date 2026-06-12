@@ -1,0 +1,110 @@
+"""Personal rules in a real git repository, against the real ast-grep binary.
+
+ast-grep's rule discovery respects gitignore, so the git-ignored personal rule
+copies need the `.ignore` negation files to stay loadable (SPEC 6, 8, 24.4),
+while staying invisible to `git status` (SPEC 9).
+"""
+
+import os
+import subprocess
+from pathlib import Path
+
+import pytest
+from conftest import mirror, write_global_rule, write_rule
+
+from byolsp.cli import main
+
+VIOLATION = 'from typing import cast\nx = cast(int, "5")\n'
+
+
+@pytest.fixture(autouse=True)
+def clean_git_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GIT_* vars leak in when pytest runs inside a git hook (pre-commit) and
+    would redirect the git calls below at the byolsp repo itself."""
+    for name in list(os.environ):
+        if name.startswith("GIT_"):
+            monkeypatch.delenv(name)
+
+
+def git_repo(home: Path, *init_extra: str) -> Path:
+    repo = home / "repo"
+    repo.mkdir()
+    git(repo, "init", "--quiet")
+    assert main(["init", "--repo", str(repo), "--non-interactive", *init_extra]) == 0
+    return repo
+
+
+def git(repo: Path, *argv: str) -> str:
+    result = subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", *argv],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout
+
+
+def scan(repo: Path) -> str:
+    result = subprocess.run(
+        ["ast-grep", "scan"], cwd=repo, capture_output=True, text=True
+    )
+    return result.stdout
+
+
+@pytest.mark.parametrize("ignore_mode", ["project", "local"])
+def test_synced_global_rule_is_seen_by_ast_grep_scan(
+    home: Path, ignore_mode: str
+) -> None:
+    write_global_rule(home, "python/no-python-cast.yml", "no-python-cast")
+    repo = git_repo(home, "--ignore-mode", ignore_mode)
+    (repo / "app.py").write_text(VIOLATION)
+
+    assert "no-python-cast" in scan(repo)
+
+
+def test_local_personal_rule_is_seen_by_ast_grep_scan(home: Path) -> None:
+    repo = git_repo(home)
+    local_rules = repo / ".byolsp" / "rules" / "personal" / "local"
+    write_rule(local_rules / "my-local-rule.yml", "my-local-rule")
+    (repo / "app.py").write_text(VIOLATION)
+
+    assert "my-local-rule" in scan(repo)
+
+
+def test_synced_nested_copy_is_invisible_to_git_status(home: Path) -> None:
+    repo = git_repo(home)
+    git(repo, "add", "-A")
+    git(repo, "commit", "--quiet", "-m", "init")
+    write_global_rule(home, "python/nested-rule.yml", "nested-rule")
+
+    assert main(["sync", "--repo", str(repo)]) == 0
+
+    assert (mirror(repo) / "python" / "nested-rule.yml").is_file()
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def test_agent_check_reports_violations_of_synced_global_rules(
+    home: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_global_rule(home, "python/no-python-cast.yml", "no-python-cast")
+    repo = git_repo(home)
+    source = repo / "app.py"
+    source.write_text(VIOLATION)
+    capsys.readouterr()
+
+    assert main(["agent-check", "--repo", str(repo), "--files", str(source)]) == 2
+
+    assert "no-python-cast" in capsys.readouterr().out
+
+
+def test_sync_restores_a_deleted_visibility_file_in_the_mirror(home: Path) -> None:
+    write_global_rule(home, "python/no-python-cast.yml", "no-python-cast")
+    repo = git_repo(home)
+    (mirror(repo) / ".ignore").unlink()
+    (repo / "app.py").write_text(VIOLATION)
+    assert "no-python-cast" not in scan(repo)
+
+    assert main(["list", "--repo", str(repo)]) == 0  # any command self-heals
+
+    assert "no-python-cast" in scan(repo)

@@ -3,7 +3,12 @@ from pathlib import Path
 import pytest
 
 from byolsp.errors import ConfigError
-from byolsp.ignore import IGNORED_PATTERNS, write_ignore_block
+from byolsp.ignore import (
+    IGNORED_PATTERNS,
+    rule_visibility_ok,
+    write_ignore_block,
+    write_rule_visibility_file,
+)
 
 
 def test_project_mode_appends_block_preserving_existing_entries(
@@ -50,3 +55,27 @@ def test_local_mode_writes_git_info_exclude(tmp_path: Path) -> None:
 def test_local_mode_requires_a_git_repository(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match="no .git directory"):
         write_ignore_block(tmp_path, "local")
+
+
+def test_ignored_patterns_cover_nested_rule_files() -> None:
+    """`*` does not cross `/` in gitignore; synced copies keep their nesting."""
+    assert ".byolsp/rules/personal/global/**/*.yml" in IGNORED_PATTERNS
+    assert ".byolsp/rules/personal/local/**/*.yml" in IGNORED_PATTERNS
+
+
+def test_visibility_file_is_written_idempotently_and_satisfies_the_check(
+    tmp_path: Path,
+) -> None:
+    assert rule_visibility_ok(tmp_path) is False
+    assert write_rule_visibility_file(tmp_path) == "written"
+    assert write_rule_visibility_file(tmp_path) == "unchanged"
+    assert rule_visibility_ok(tmp_path) is True
+
+
+def test_unmarked_visibility_file_is_preserved(tmp_path: Path) -> None:
+    (tmp_path / ".ignore").write_text("!*.yml\n")
+
+    assert write_rule_visibility_file(tmp_path) == "unmarked"
+
+    assert (tmp_path / ".ignore").read_text() == "!*.yml\n"
+    assert rule_visibility_ok(tmp_path) is False  # missing !*.yaml

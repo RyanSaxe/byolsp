@@ -1,4 +1,11 @@
-"""The marked git ignore block for BYOLSP's untracked generated state (SPEC 9)."""
+"""The marked git ignore block for BYOLSP's untracked generated state (SPEC 9),
+plus the `.ignore` files that keep those rules visible to ast-grep.
+
+ast-grep's rule discovery respects gitignore, so the git-ignored personal rule
+files would never be loaded inside a git repository. ast-grep also reads
+`.ignore` files, which git does not, so a `.ignore` with negation patterns in
+each personal rule directory un-ignores the rules for ast-grep alone.
+"""
 
 from __future__ import annotations
 
@@ -6,20 +13,54 @@ from pathlib import Path
 from typing import Literal
 
 from byolsp.errors import ConfigError
-from byolsp.fsio import write_text_atomic
+from byolsp.fsio import MarkedWriteResult, write_marked_text, write_text_atomic
 
 IgnoreMode = Literal["project", "local"]
 
+# `**` so nested rules (e.g. personal/global/python/no-cast.yml) are ignored too.
 IGNORED_PATTERNS = (
     ".byolsp/local.yml",
-    ".byolsp/rules/personal/local/*.yml",
-    ".byolsp/rules/personal/local/*.yaml",
-    ".byolsp/rules/personal/global/*.yml",
-    ".byolsp/rules/personal/global/*.yaml",
+    ".byolsp/rules/personal/local/**/*.yml",
+    ".byolsp/rules/personal/local/**/*.yaml",
+    ".byolsp/rules/personal/global/**/*.yml",
+    ".byolsp/rules/personal/global/**/*.yaml",
 )
 
 BLOCK_BEGIN = "# >>> Managed by BYOLSP. Manual edits may be overwritten. >>>"
 BLOCK_END = "# <<< Managed by BYOLSP <<<"
+
+VISIBILITY_MARKER = "# Managed by BYOLSP. Manual edits may be overwritten."
+
+VISIBILITY_PATTERNS = ("!*.yml", "!*.yaml")
+
+VISIBILITY_FILE_CONTENT = (
+    f"{VISIBILITY_MARKER}\n"
+    "# Git ignores the personal rule files in this directory, and ast-grep's\n"
+    "# rule discovery respects gitignore. ast-grep also reads .ignore files\n"
+    "# (git does not), so these negations keep the rules visible to ast-grep.\n"
+    + "\n".join(VISIBILITY_PATTERNS)
+    + "\n"
+)
+
+
+def write_rule_visibility_file(rules_dir: Path) -> MarkedWriteResult:
+    """Converge `rules_dir/.ignore` so ast-grep loads the git-ignored rules.
+
+    A user-owned (unmarked) .ignore is never touched; doctor flags it when it
+    no longer keeps the rules visible.
+    """
+    return write_marked_text(
+        rules_dir / ".ignore", VISIBILITY_FILE_CONTENT, VISIBILITY_MARKER
+    )
+
+
+def rule_visibility_ok(rules_dir: Path) -> bool:
+    """Whether `rules_dir/.ignore` un-ignores rule files for ast-grep."""
+    path = rules_dir / ".ignore"
+    if not path.is_file():
+        return False
+    lines = {line.strip() for line in path.read_text(encoding="utf-8").splitlines()}
+    return all(pattern in lines for pattern in VISIBILITY_PATTERNS)
 
 
 def ignore_file(repo_root: Path, mode: IgnoreMode) -> Path:

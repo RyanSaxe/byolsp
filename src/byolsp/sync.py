@@ -19,6 +19,7 @@ from byolsp.config import (
     repo_registry_path,
 )
 from byolsp.fsio import write_text_atomic
+from byolsp.ignore import write_rule_visibility_file
 from byolsp.paths import global_config_dir, resolve_repo_root
 from byolsp.rules import Rule, check_id_conflicts, discover_rule_files, load_rules
 
@@ -98,8 +99,11 @@ def mirror_global_rules(mirror_dir: Path, desired: dict[str, str]) -> MirrorResu
     """Make the mirror's YAML contents exactly `desired` (SPEC 13 step 6).
 
     Copies new and changed files, deletes YAML files not in `desired`, prunes
-    empty subdirectories, and leaves non-YAML files (.gitkeep) alone.
+    empty subdirectories, and leaves non-YAML files (.gitkeep) alone — except
+    the `.ignore` file that keeps the git-ignored copies visible to ast-grep,
+    which the mirror restores because the directory is wholly byolsp-owned.
     """
+    write_rule_visibility_file(mirror_dir)
     actual = mirror_contents(mirror_dir)
     written = 0
     for relpath, content in desired.items():
