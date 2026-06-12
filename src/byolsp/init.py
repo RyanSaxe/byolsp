@@ -148,6 +148,9 @@ def _options_from_args(args: argparse.Namespace) -> InitOptions:
         git_hooks: bool = args.git_hooks
     else:
         git_hooks = _prompt_git_hooks() if interactive else False
+    # The harness-neutral rule-capture skill installs by default (SPEC 27.2).
+    if "skill" not in agents:
+        agents.append("skill")
     return InitOptions(
         agents=agents,
         ignore_mode=ignore_mode,

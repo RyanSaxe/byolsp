@@ -32,7 +32,8 @@ def test_claude_code_without_claude_dir_writes_wiring_instructions(home: Path) -
     content = (repo / AGENTS_DIR / "claude-code.md").read_text()
     assert MANAGED_MARKER in content
     assert "PostToolUse" in content
-    assert not (repo / ".claude").exists()
+    # The skill render creates .claude/skills/, but no settings hook appears.
+    assert not (repo / ".claude" / "settings.json").exists()
 
 
 def test_claude_code_with_claude_dir_merges_settings_hook(home: Path) -> None:
@@ -108,7 +109,7 @@ def test_hook_install_writes_the_adapter_and_records_the_agent(home: Path) -> No
     assert hook("install", repo, "codex") == 0
 
     assert MANAGED_MARKER in (repo / AGENTS_DIR / "codex.md").read_text()
-    assert load_repo_config(repo).agents == ["codex"]
+    assert load_repo_config(repo).agents == ["skill", "codex"]
 
 
 def test_hook_install_requires_an_initialized_repo(
@@ -135,7 +136,7 @@ def test_hook_uninstall_removes_only_marker_bearing_files(
 
     assert (repo / AGENTS_DIR / "copilot.md").read_text() == "my own notes\n"
     assert "without the BYOLSP marker" in capsys.readouterr().out
-    assert load_repo_config(repo).agents == []
+    assert load_repo_config(repo).agents == ["skill"]
 
 
 def test_hook_uninstall_removes_the_installed_adapter(home: Path) -> None:
@@ -144,7 +145,7 @@ def test_hook_uninstall_removes_the_installed_adapter(home: Path) -> None:
     assert hook("uninstall", repo, "codex") == 0
 
     assert not (repo / AGENTS_DIR / "codex.md").exists()
-    assert load_repo_config(repo).agents == []
+    assert load_repo_config(repo).agents == ["skill"]
     # Idempotent: a second uninstall has nothing to do and still succeeds.
     assert hook("uninstall", repo, "codex") == 0
 
@@ -154,7 +155,7 @@ def test_hook_uninstall_claude_code_removes_only_the_byolsp_settings_group(
 ) -> None:
     repo = make_repo(home)
     user_group = {"matcher": "Bash", "hooks": [{"type": "command", "command": "true"}]}
-    (repo / ".claude").mkdir()
+    (repo / ".claude").mkdir(exist_ok=True)
     settings = repo / ".claude" / "settings.json"
     settings.write_text(json.dumps({"hooks": {"PostToolUse": [user_group]}}))
     hook("install", repo, "claude-code")

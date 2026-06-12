@@ -12,12 +12,13 @@ from byolsp.config import load_repo_config, save_repo_config
 from byolsp.errors import ConfigError
 from byolsp.fsio import write_marked_text, write_text_atomic
 from byolsp.paths import resolve_repo_root
+from byolsp.skill import SKILL_RELPATHS, skill_markdown
 
 JsonValue: TypeAlias = (
     "None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]"
 )
 
-AGENT_CHOICES = ("generic", "claude-code", "codex", "copilot")
+AGENT_CHOICES = ("generic", "claude-code", "codex", "copilot", "skill")
 
 MANAGED_MARKER = "<!-- Managed by BYOLSP. Manual edits may be overwritten. -->"
 
@@ -92,6 +93,8 @@ def install_agent(repo_root: Path, agent: str) -> list[str]:
     """Install one agent adapter; returns summary lines for changes made."""
     if agent == "claude-code":
         return _install_claude_code(repo_root)
+    if agent == "skill":
+        return _install_skill(repo_root)
     return _write_managed_file(
         repo_root, _instructions_relpath(agent), _agent_instructions(agent)
     )
@@ -100,6 +103,10 @@ def install_agent(repo_root: Path, agent: str) -> list[str]:
 def uninstall_agent(repo_root: Path, agent: str) -> list[str]:
     """Remove one agent adapter; only marker-bearing files are deleted (SPEC 17)."""
     messages: list[str] = []
+    if agent == "skill":
+        for relpath in SKILL_RELPATHS:
+            messages.extend(_remove_managed_file(repo_root, relpath))
+        return messages
     if agent == "claude-code":
         messages.extend(_remove_claude_code_hook(repo_root))
     messages.extend(_remove_managed_file(repo_root, _instructions_relpath(agent)))
@@ -110,10 +117,42 @@ def missing_agent_files(repo_root: Path, agents: Sequence[str]) -> list[str]:
     """Expected-but-missing integration files for doctor's agent_files check."""
     missing: list[str] = []
     for agent in agents:
+        if agent == "skill":
+            missing.extend(_missing_skill_renders(repo_root))
+            continue
         if agent == "claude-code" and _claude_code_installed(repo_root):
             continue
         relpath = _instructions_relpath(agent)
         if not (repo_root / relpath).is_file():
+            missing.append(relpath)
+    return missing
+
+
+def _install_skill(repo_root: Path) -> list[str]:
+    """Render the rule-capture skill into both discovery locations (SPEC 27.1)."""
+    content = skill_markdown(MANAGED_MARKER)
+    messages: list[str] = []
+    for relpath in SKILL_RELPATHS:
+        messages.extend(_write_managed_file(repo_root, relpath, content))
+    return messages
+
+
+def _missing_skill_renders(repo_root: Path) -> list[str]:
+    """Both renders must exist and match the canonical content (SPEC 27.2).
+
+    A marker-bearing render that drifted from the canonical content counts:
+    `byolsp hook install --agent skill` refreshes it. Unmarked files at these
+    paths are user-owned and accepted as is.
+    """
+    content = skill_markdown(MANAGED_MARKER)
+    missing: list[str] = []
+    for relpath in SKILL_RELPATHS:
+        path = repo_root / relpath
+        if not path.is_file():
+            missing.append(relpath)
+            continue
+        existing = path.read_text(encoding="utf-8")
+        if MANAGED_MARKER in existing and existing != content:
             missing.append(relpath)
     return missing
 
@@ -203,7 +242,19 @@ def _install_claude_code(repo_root: Path) -> list[str]:
 
 
 def _claude_code_detected(repo_root: Path) -> bool:
-    return (repo_root / ".claude").is_dir()
+    """True when .claude/ holds anything beyond the byolsp skill render.
+
+    init plants the skill at .claude/skills/byolsp/ in every repo (SPEC 27.1),
+    so that subtree alone is byolsp's own output, not evidence of Claude Code.
+    """
+    claude_dir = repo_root / ".claude"
+    if not claude_dir.is_dir():
+        return False
+    entries = {entry.name for entry in claude_dir.iterdir()}
+    if entries != {"skills"}:
+        return True
+    skills = {entry.name for entry in (claude_dir / "skills").iterdir()}
+    return skills != {"byolsp"}
 
 
 def _claude_code_installed(repo_root: Path) -> bool:

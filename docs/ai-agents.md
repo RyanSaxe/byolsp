@@ -78,13 +78,14 @@ the hook can never block the agent loop.
 ## Installing and removing integrations
 
 ```bash
-byolsp hook install --agent generic|claude-code|codex|copilot
-byolsp hook uninstall --agent generic|claude-code|codex|copilot
+byolsp hook install --agent generic|claude-code|codex|copilot|skill
+byolsp hook uninstall --agent generic|claude-code|codex|copilot|skill
 ```
 
 `byolsp init` also installs the agents you select (interactively or via
-`--agents`). Installed agents are recorded under `ai.agents` in
-`.byolsp/config.yml`, which `doctor` and `hook uninstall` use.
+`--agents`), plus the harness-neutral `skill` by default. Installed agents are
+recorded under `ai.agents` in `.byolsp/config.yml`, which `doctor` and
+`hook uninstall` use.
 
 Generated files carry the marker
 `<!-- Managed by BYOLSP. Manual edits may be overwritten. -->`. `uninstall`
@@ -99,10 +100,27 @@ preserved with a message.
 | `claude-code` | Real PostToolUse hook when `.claude/` exists; otherwise instruction file `.byolsp/agents/claude-code.md` with the exact wiring |
 | `codex` | Instruction file `.byolsp/agents/codex.md`; copy the instruction into `AGENTS.md` |
 | `copilot` | Instruction file `.byolsp/agents/copilot.md`; copy the instruction into `.github/copilot-instructions.md` |
+| `skill` | Rule-capture skill rendered identically into `.agents/skills/byolsp/SKILL.md` and `.claude/skills/byolsp/SKILL.md`; installed by `init` by default |
+
+### skill
+
+The rule-capture skill teaches agents to *create* rules from your feedback,
+not just obey them: when you voice a durable, mechanically checkable
+preference ("never use X"), the agent drafts a complete ast-grep rule,
+proposes a scope, confirms with one question, creates it via
+`byolsp add --scope SCOPE --from FILE`, and verifies it with `ast-grep scan`.
+Preferences no syntax pattern can express are declined with a pointer to the
+harness's instruction file.
+
+The two render locations cover every major harness natively (Claude Code
+reads `.claude/skills/`; Codex, Copilot, and OpenCode read `.agents/skills/`).
+`doctor` checks both renders exist and match the packaged content when
+`skill` is in `ai.agents`.
 
 ### claude-code
 
-When the repo has a `.claude/` directory, install merges this hook into
+When the repo has a `.claude/` directory holding more than the byolsp skill
+render, install merges this hook into
 `.claude/settings.json` (created if absent; existing keys and hook groups
 preserved):
 

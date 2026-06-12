@@ -20,6 +20,8 @@ TRACKED_FILES = (
     ".byolsp/rules/personal/global/.gitkeep",
     ".byolsp/rules/personal/global/.ignore",
     ".byolsp/agents/README.md",
+    ".agents/skills/byolsp/SKILL.md",
+    ".claude/skills/byolsp/SKILL.md",
 )
 
 
@@ -128,7 +130,7 @@ def test_agents_are_recorded_and_merged_without_duplicates(repo: Path) -> None:
     init(repo, "--agents", "claude-code,codex")
     init(repo, "--agents", "claude-code,generic")
 
-    assert load_repo_config(repo).agents == ["claude-code", "codex", "generic"]
+    assert load_repo_config(repo).agents == ["claude-code", "codex", "skill", "generic"]
 
 
 def test_unknown_agent_fails_cleanly(
@@ -199,7 +201,7 @@ def test_interactive_prompts_drive_agents_ignore_mode_and_hooks(
 
     assert main(["init", "--repo", str(repo)]) == 0
 
-    assert load_repo_config(repo).agents == ["claude-code"]
+    assert load_repo_config(repo).agents == ["claude-code", "skill"]
     assert (repo / ".git" / "info" / "exclude").is_file()
     assert "Installed .git/hooks/post-merge" in capsys.readouterr().out
     assert (repo / ".git" / "hooks" / "post-checkout").is_file()
