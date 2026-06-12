@@ -160,6 +160,22 @@ def test_git_hooks_flag_prints_not_implemented_notice(
     assert "Git hook shims are not implemented yet" in capsys.readouterr().out
 
 
+def test_init_ends_with_quick_doctor_surfacing_problems(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Init succeeds without ast-grep but its closing doctor --quick says so."""
+    empty_bin = repo.parent / "empty-bin"
+    empty_bin.mkdir()
+    monkeypatch.setenv("PATH", str(empty_bin))
+    monkeypatch.delenv("BYOLSP_AST_GREP", raising=False)
+
+    assert init(repo) == 0
+
+    out = capsys.readouterr().out
+    assert "doctor: ast_grep_found: ast-grep is required but was not found." in out
+    assert f"Initialized BYOLSP in {repo}" in out
+
+
 def test_interactive_prompts_drive_agents_ignore_mode_and_hooks(
     repo: Path,
     monkeypatch: pytest.MonkeyPatch,

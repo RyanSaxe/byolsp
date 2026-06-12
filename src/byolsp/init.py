@@ -26,6 +26,7 @@ from byolsp.config import (
     save_repo_config,
     save_repo_registry,
 )
+from byolsp.doctor import collect_checks
 from byolsp.errors import ConfigError, RepoNotInitialized
 from byolsp.ignore import IgnoreMode, ignore_file, write_ignore_block
 from byolsp.paths import global_config_dir, resolve_repo_root
@@ -85,7 +86,12 @@ def initialize_repo(
     _, sync_result = sync_repo(repo_root, load_canonical_rules(config_dir))
     if sync_result.changed:
         messages.append(f"Synced {summarize_changes(sync_result)}")
-    # Seam for the doctor component (SPEC 15.1 step 8): run `doctor --quick` here.
+    # SPEC 15.1 step 8: doctor --quick, surfacing only the problems it finds.
+    messages.extend(
+        f"doctor: {check.id}: {check.message}"
+        for check in collect_checks(repo_root, config_dir, quick=True)
+        if not check.ok
+    )
     return messages
 
 
