@@ -772,7 +772,45 @@ Not in v0.1: rule packs, symlink-based sync, any LSP wrapper or custom LSP serve
 
 Hooks come last: they depend on the rule and sync model. There is no LSP step; ast-grep already provides the LSP.
 
-## 27. Core Principle
+## 27. Rule Capture Skill and Expanded Harness Support
+
+This section is the v0.1 fast-follow: the product's original "AI Skill" — agents that actively *create* rules from conversational feedback, not just obey them — plus harness coverage matching the June 2026 landscape.
+
+### 27.1 The byolsp Skill
+
+One canonical skill, authored once in the byolsp package, rendered into the two locations that cover every major harness natively (verified against official docs):
+
+```text
+.agents/skills/byolsp/SKILL.md   (Codex, Copilot, OpenCode)
+.claude/skills/byolsp/SKILL.md   (Claude Code; also read by Copilot and OpenCode)
+```
+
+SKILL.md frontmatter must satisfy the cross-agent standard: `name` (1–64 chars, lowercase alphanumeric with single hyphens) and `description` (≤1024 chars, stating precisely when to trigger). The managed marker goes in the markdown body immediately after the frontmatter (frontmatter must start at byte 0). Both renders share identical content.
+
+The skill teaches the agent this behavior:
+
+1. **Trigger** when the user expresses a durable, mechanically checkable preference — "never use X", "always do Y", "stop doing Z" — about code syntax or structure. Not one-off requests, not vague philosophy.
+2. **Draft** a complete ast-grep rule: id, language, severity, message, `rule.pattern`, and `metadata.byolsp` with rationale, an imperative `agent_prompt` written for future AI readers, and tags.
+3. **Propose scope**: project for team policy voiced about this codebase, global for personal preferences that transcend the repo, local for experiments. Show the drafted rule and recommended scope.
+4. **Confirm** with exactly one question before writing. Never create a rule from an offhand remark without confirmation.
+5. **Create** via `byolsp add --scope SCOPE --from FILE` (which validates, syncs, and runs doctor), then **verify** by running `ast-grep scan` against an example of the violation.
+6. **Decline** gracefully when the preference is not expressible as an ast-grep pattern (naming philosophy, architectural taste): say so and suggest the harness's instruction file instead.
+
+The skill must include a worked example (feedback → drafted rule → confirmation → command) and a short ast-grep pattern-authoring primer (metavariables, `$$$`, when patterns are approximate).
+
+### 27.2 Installation Semantics
+
+`skill` becomes an agent choice alongside the harness names. `byolsp init` installs it by default (it is harness-neutral, like `agents/README.md`); `byolsp hook install --agent skill` and `hook uninstall --agent skill` manage it explicitly. Renders are marker-managed: unmarked user files at those paths are never touched. Doctor checks both renders exist and match when `skill` is in `ai.agents`.
+
+### 27.3 OpenCode Adapter
+
+`--agent opencode` joins the agent choices. OpenCode supports real post-edit hooks via JS plugins: install a marker-managed `.opencode/plugin/byolsp.ts` that hooks `tool.execute.after` for file-mutating tools (`edit`, `write`, `apply_patch`), runs `byolsp agent-check --files <file>`, and appends diagnostics to the tool output the model sees (exit 2 carries the diagnostics; exit 0 appends nothing). Plus the standard instruction file at `.byolsp/agents/opencode.md`. Uninstall removes only marker-bearing files.
+
+### 27.4 Codex and Copilot Notes
+
+Codex and Copilot still expose no post-edit hook API; their adapters remain instruction files — but both auto-discover the skill from section 27.1's locations, so they get the capture loop natively. Their instruction files should mention the skill by name.
+
+## 28. Core Principle
 
 BYOLSP makes custom diagnostics feel native everywhere by arranging plain files so ast-grep already knows what to do.
 
