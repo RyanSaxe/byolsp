@@ -110,17 +110,39 @@ natively; their instruction files say so.
 ### skill
 
 The rule-capture skill teaches agents to *create* rules from your feedback,
-not just obey them: when you voice a durable, mechanically checkable
-preference ("never use X"), the agent drafts a complete ast-grep rule,
-proposes a scope, confirms with one question, creates it via
-`byolsp add --scope SCOPE --from FILE`, and verifies it with `ast-grep scan`.
-Preferences no syntax pattern can express are declined with a pointer to the
-harness's instruction file.
+not just obey them. When you voice a durable, mechanically checkable
+preference about code syntax or structure — "never use X", "always do Y" —
+the agent:
 
-The two render locations cover every major harness natively (Claude Code
-reads `.claude/skills/`; Codex, Copilot, and OpenCode read `.agents/skills/`).
-`doctor` checks both renders exist and match the packaged content when
-`skill` is in `ai.agents`.
+1. **Drafts** a complete ast-grep rule: id, language, severity, message,
+   `rule.pattern`, and `metadata.byolsp` with a rationale, an imperative
+   `agent_prompt` for future AI readers, and tags.
+2. **Proposes a scope**: `project` for team policy voiced about this
+   codebase, `global` for personal preferences that transcend the repo,
+   `local` for experiments — and shows you the drafted rule.
+3. **Confirms** with exactly one question before writing anything. No rule is
+   ever created from an offhand remark.
+4. **Creates** the rule via `byolsp add --scope SCOPE --from FILE` (which
+   validates, syncs, and runs doctor), then **verifies** it by running
+   `ast-grep scan` against an in-repo example of the violation.
+
+Preferences no syntax pattern can express (naming philosophy, architectural
+taste) are declined with a pointer to the harness's instruction file instead.
+
+The skill is one canonical document rendered identically into two locations,
+which together cover every major harness natively:
+
+| Harness | Reads the skill from |
+| --- | --- |
+| Claude Code | `.claude/skills/byolsp/SKILL.md` |
+| Codex | `.agents/skills/byolsp/SKILL.md` |
+| Copilot | `.agents/skills/byolsp/SKILL.md`; also reads `.claude/skills/` |
+| OpenCode | `.agents/skills/byolsp/SKILL.md`; also reads `.claude/skills/` |
+
+`byolsp init` installs both renders by default;
+`byolsp hook install --agent skill` and `hook uninstall --agent skill` manage
+them explicitly. `doctor` checks both renders exist and match the packaged
+content when `skill` is in `ai.agents`.
 
 ### opencode
 
@@ -131,6 +153,11 @@ the tool is `edit`, `write`, or `apply_patch`, it runs
 appends the diagnostics to the tool output the model sees. Any other exit
 code appends nothing, so a byolsp configuration error never breaks the agent
 loop.
+
+Install also writes the standard instruction file `.byolsp/agents/opencode.md`,
+which tells the model the plugin already covers those three tools and to run
+`agent-check` manually only for files changed another way (for example via
+shell commands).
 
 ### claude-code
 

@@ -43,6 +43,15 @@ Project and local rules override global rules by ID. See
 [docs/rules.md](docs/rules.md) for the rule format, metadata, and the
 `add`/`edit`/`promote`/`exclude` workflow.
 
+## AI agents
+
+Agents don't just obey your rules — they can capture them. Post-edit hooks
+feed `byolsp agent-check` diagnostics straight back into the agent loop, and
+the `byolsp` skill (installed by `init`) turns durable feedback like "never
+do this" into an ast-grep rule: the agent drafts the rule, confirms with one
+question, then creates it with `byolsp add`. See
+[docs/ai-agents.md](docs/ai-agents.md).
+
 ## Why copies, not symlinks
 
 Global rules are canonical in `~/.config/byolsp/rules/` and copied into each
