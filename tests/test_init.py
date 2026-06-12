@@ -153,11 +153,14 @@ def test_unmarked_agent_instructions_are_preserved(
     assert "without the BYOLSP marker" in capsys.readouterr().out
 
 
-def test_git_hooks_flag_prints_not_implemented_notice(
+def test_git_hooks_without_a_git_dir_fail_cleanly(
     repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    assert init(repo, "--git-hooks") == 0
-    assert "Git hook shims are not implemented yet" in capsys.readouterr().out
+    assert init(repo, "--git-hooks") == 1
+
+    captured = capsys.readouterr()
+    assert "has no .git directory" in captured.err
+    assert "Traceback" not in captured.err
 
 
 def test_init_ends_with_quick_doctor_surfacing_problems(
@@ -189,4 +192,5 @@ def test_interactive_prompts_drive_agents_ignore_mode_and_hooks(
 
     assert load_repo_config(repo).agents == ["claude-code"]
     assert (repo / ".git" / "info" / "exclude").is_file()
-    assert "Git hook shims are not implemented yet" in capsys.readouterr().out
+    assert "Installed .git/hooks/post-merge" in capsys.readouterr().out
+    assert (repo / ".git" / "hooks" / "post-checkout").is_file()

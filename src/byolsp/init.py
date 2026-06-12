@@ -28,15 +28,11 @@ from byolsp.config import (
 )
 from byolsp.doctor import quick_doctor_problems
 from byolsp.errors import ConfigError, RepoNotInitialized
+from byolsp.githooks import install_git_shims
 from byolsp.ignore import IgnoreMode, ignore_file, write_ignore_block
 from byolsp.paths import global_config_dir, resolve_repo_root
 from byolsp.sgconfig import ensure_rule_dirs
 from byolsp.sync import load_canonical_rules, summarize_changes, sync_repo
-
-GIT_HOOKS_NOTICE = (
-    "Git hook shims are not implemented yet; rerun `byolsp init --git-hooks` "
-    "after upgrading."
-)
 
 
 @dataclass
@@ -78,7 +74,7 @@ def initialize_repo(
         messages.append(f"Wrote ignore block to {target.as_posix()}")
     messages.extend(install_agents(repo_root, options.agents))
     if options.git_hooks:
-        messages.append(GIT_HOOKS_NOTICE)
+        messages.extend(install_git_shims(repo_root))
     if options.register and register_repo(
         repo_root, repo_registry_path(config_dir, global_config)
     ):
