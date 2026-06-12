@@ -51,6 +51,8 @@ def build_parser() -> argparse.ArgumentParser:
             _add_list_arguments(command)
         if name == "add":
             _add_add_arguments(command)
+        if name == "edit":
+            _add_edit_arguments(command)
         if name in ("exclude", "include"):
             _add_rule_id_arguments(command)
         if name == "hook":
@@ -154,6 +156,17 @@ def _add_add_arguments(command: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_edit_arguments(command: argparse.ArgumentParser) -> None:
+    _add_repo_argument(command)
+    command.add_argument("rule_id", metavar="RULE_ID", help="ID of the rule to edit")
+    command.add_argument(
+        "--scope",
+        choices=("project", "local", "global", "auto"),
+        default="auto",
+        help="Where to look for the rule (default: project, then local, then global)",
+    )
+
+
 def _add_rule_id_arguments(command: argparse.ArgumentParser) -> None:
     _add_repo_argument(command)
     command.add_argument("rule_id", metavar="RULE_ID", help="ID of a global rule")
@@ -201,6 +214,10 @@ def run(args: argparse.Namespace) -> int:
         from byolsp.rule_commands import run_add
 
         return run_add(args)
+    if args.command == "edit":
+        from byolsp.rule_commands import run_edit
+
+        return run_edit(args)
     if args.command == "exclude":
         from byolsp.rule_commands import run_exclude
 

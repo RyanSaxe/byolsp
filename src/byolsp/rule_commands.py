@@ -10,6 +10,7 @@ import sys
 import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Literal
 
 from byolsp.config import (
     RepoPaths,
@@ -121,6 +122,27 @@ def run_add(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_edit(args: argparse.Namespace) -> int:
+    context = repo_context(args)
+    scope, path = _find_rule(context, args.rule_id, args.scope)
+    original = path.read_text(encoding="utf-8")
+    draft = _edit_in_draft(original)
+    if draft is None:
+        print(f"No changes to '{args.rule_id}'")
+        return 0
+    rule = replace(_parse_draft(draft), path=path)
+    try:
+        _check_conflicts(context, scope, rule, replaced_path=path)
+    except ByolspError as error:
+        raise _with_draft_hint(error, draft) from error
+    draft.unlink()
+    _warn_on_id_pattern(rule)
+    write_text_atomic(path, rule.content)
+    print(f"Updated {scope} rule '{rule.id}' at {_display(path, context)}")
+    _finish(context, fan_out=scope == "global")
+    return 0
+
+
 def run_exclude(args: argparse.Namespace) -> int:
     context = repo_context(args)
     local = load_local_config(context.repo_root)
@@ -155,6 +177,27 @@ def _build_template(rule_id: str | None, language: str | None) -> str:
     return RULE_TEMPLATE.format(
         rule_id=rule_id or "REPLACE_ME", language=language or "Python"
     )
+
+
+def _find_rule(
+    context: RepoContext, rule_id: str, requested: RuleScope | Literal["auto"]
+) -> tuple[RuleScope, Path]:
+    """Resolve a rule ID to its scope and file (SPEC 15.5).
+
+    `auto` tries project, then local, then canonical global. The global scope
+    searches the canonical rules root via _scope_dir, so a generated copy
+    under personal/global is never opened (SPEC 12.3).
+    """
+    if requested == "auto":
+        scopes: tuple[RuleScope, ...] = ("project", "local", "global")
+    else:
+        scopes = (requested,)
+    for scope in scopes:
+        for rule in load_rules(_scope_dir(context, scope)):
+            if rule.id == rule_id:
+                return scope, rule.path
+    where = "any scope" if requested == "auto" else f"{requested} rules"
+    raise ByolspError(f"No rule with ID '{rule_id}' found in {where}.")
 
 
 def _load_source_rule(source: Path) -> Rule:
