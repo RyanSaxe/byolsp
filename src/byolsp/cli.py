@@ -61,8 +61,18 @@ def build_parser() -> argparse.ArgumentParser:
             _add_agent_check_arguments(command)
         if name == "hook":
             actions = command.add_subparsers(dest="hook_action", required=True)
-            actions.add_parser("install", help="Install agent integration files")
-            actions.add_parser("uninstall", help="Remove BYOLSP-managed agent files")
+            for action_name, action_help in (
+                ("install", "Install agent integration files"),
+                ("uninstall", "Remove BYOLSP-managed agent files"),
+            ):
+                action = actions.add_parser(action_name, help=action_help)
+                _add_repo_argument(action)
+                action.add_argument(
+                    "--agent",
+                    choices=AGENT_CHOICES,
+                    required=True,
+                    help="Which AI integration to manage",
+                )
     return parser
 
 
@@ -290,6 +300,10 @@ def run(args: argparse.Namespace) -> int:
         from byolsp.agent_check import run_agent_check
 
         return run_agent_check(args)
+    if args.command == "hook":
+        from byolsp.agents import run_hook
+
+        return run_hook(args)
     raise ByolspError(f"'{args.command}' is not implemented yet")
 
 

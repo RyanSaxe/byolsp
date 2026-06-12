@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TypeAlias
 
+from byolsp.config import load_repo_config, save_repo_config
 from byolsp.errors import ConfigError
 from byolsp.fsio import write_text_atomic
+from byolsp.paths import resolve_repo_root
 
 JsonValue: TypeAlias = (
     "None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]"
@@ -53,6 +56,31 @@ GENERIC_AGENT_INSTRUCTIONS = (
 )
 
 
+def run_hook(args: argparse.Namespace) -> int:
+    """`byolsp hook install|uninstall --agent NAME` (SPEC 15.10).
+
+    Installed agents are recorded in ai.agents so doctor and uninstall know
+    about them (SPEC 10.1).
+    """
+    repo_root = resolve_repo_root(explicit=args.repo)
+    config = load_repo_config(repo_root)
+    if args.hook_action == "install":
+        messages = install_agent(repo_root, args.agent)
+        recorded = args.agent not in config.agents
+        if recorded:
+            config.agents.append(args.agent)
+    else:
+        messages = uninstall_agent(repo_root, args.agent)
+        recorded = args.agent in config.agents
+        if recorded:
+            config.agents.remove(args.agent)
+    if recorded:
+        save_repo_config(repo_root, config)
+    for message in messages:
+        print(message)
+    return 0
+
+
 def install_agents(repo_root: Path, agents: Sequence[str]) -> list[str]:
     """Init step 5: the generic README is part of the repository layout (SPEC 6);
     the explicitly requested agents get their adapters on top.
@@ -71,6 +99,15 @@ def install_agent(repo_root: Path, agent: str) -> list[str]:
     return _write_managed_file(
         repo_root, _instructions_relpath(agent), _agent_instructions(agent)
     )
+
+
+def uninstall_agent(repo_root: Path, agent: str) -> list[str]:
+    """Remove one agent adapter; only marker-bearing files are deleted (SPEC 17)."""
+    messages: list[str] = []
+    if agent == "claude-code":
+        messages.extend(_remove_claude_code_hook(repo_root))
+    messages.extend(_remove_managed_file(repo_root, _instructions_relpath(agent)))
+    return messages
 
 
 def missing_agent_files(repo_root: Path, agents: Sequence[str]) -> list[str]:
@@ -143,6 +180,16 @@ def _write_managed_file(repo_root: Path, relpath: str, content: str) -> list[str
     return [f"Wrote {relpath}"]
 
 
+def _remove_managed_file(repo_root: Path, relpath: str) -> list[str]:
+    path = repo_root / relpath
+    if not path.is_file():
+        return []
+    if MANAGED_MARKER not in path.read_text(encoding="utf-8"):
+        return [f"{relpath} exists without the BYOLSP marker; left untouched."]
+    path.unlink()
+    return [f"Removed {relpath}"]
+
+
 def _install_claude_code(repo_root: Path) -> list[str]:
     """A real PostToolUse hook when Claude Code is detectable, else instructions."""
     if not _claude_code_detected(repo_root):
@@ -176,6 +223,45 @@ def _claude_code_installed(repo_root: Path) -> bool:
     except ConfigError:
         return False
     return any(_contains_byolsp_command(group) for group in groups)
+
+
+def _remove_claude_code_hook(repo_root: Path) -> list[str]:
+    """Drop the PostToolUse groups byolsp installed; user-edited groups stay."""
+    settings_path = repo_root / CLAUDE_SETTINGS_RELPATH
+    if not settings_path.is_file():
+        return []
+    settings = _load_claude_settings(settings_path)
+    hooks = settings.get("hooks")
+    if not isinstance(hooks, dict):
+        return []
+    groups = hooks.get("PostToolUse")
+    if not isinstance(groups, list):
+        return []
+    kept = [group for group in groups if not _is_byolsp_group(group)]
+    if len(kept) == len(groups):
+        return []
+    if kept:
+        hooks["PostToolUse"] = kept
+    else:
+        del hooks["PostToolUse"]
+        if not hooks:
+            del settings["hooks"]
+    _save_claude_settings(settings_path, settings)
+    return [f"Removed the BYOLSP PostToolUse hook from {CLAUDE_SETTINGS_RELPATH}"]
+
+
+def _is_byolsp_group(group: JsonValue) -> bool:
+    """True for a matcher group whose every command is ours: the shape we install.
+
+    A group where a user mixed in their own hooks counts as user-edited and is
+    preserved, matching the managed-marker rule for files.
+    """
+    if not isinstance(group, dict):
+        return False
+    hooks = group.get("hooks")
+    if not isinstance(hooks, list) or not hooks:
+        return False
+    return all(_is_byolsp_command(hook) for hook in hooks)
 
 
 def _claude_hook_group() -> dict[str, JsonValue]:

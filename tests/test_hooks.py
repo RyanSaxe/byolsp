@@ -8,6 +8,7 @@ from conftest import make_repo
 
 from byolsp.agents import CLAUDE_HOOK_COMMAND, MANAGED_MARKER
 from byolsp.cli import main
+from byolsp.config import load_repo_config
 
 AGENTS_DIR = Path(".byolsp") / "agents"
 
@@ -79,3 +80,71 @@ def test_invalid_claude_settings_fail_cleanly(
     err = capsys.readouterr().err
     assert ".claude/settings.json is not valid JSON" in err
     assert "Traceback" not in err
+
+
+def hook(action: str, repo: Path, agent: str) -> int:
+    return main(["hook", action, "--repo", str(repo), "--agent", agent])
+
+
+def test_hook_install_writes_the_adapter_and_records_the_agent(home: Path) -> None:
+    repo = make_repo(home)
+
+    assert hook("install", repo, "codex") == 0
+
+    assert MANAGED_MARKER in (repo / AGENTS_DIR / "codex.md").read_text()
+    assert load_repo_config(repo).agents == ["codex"]
+
+
+def test_hook_install_requires_an_initialized_repo(
+    home: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = home / "bare"
+    repo.mkdir()
+
+    assert hook("install", repo, "generic") == 1
+
+    err = capsys.readouterr().err
+    assert "byolsp init" in err
+    assert "Traceback" not in err
+
+
+def test_hook_uninstall_removes_only_marker_bearing_files(
+    home: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = make_repo(home)
+    hook("install", repo, "copilot")
+    (repo / AGENTS_DIR / "copilot.md").write_text("my own notes\n")
+
+    assert hook("uninstall", repo, "copilot") == 0
+
+    assert (repo / AGENTS_DIR / "copilot.md").read_text() == "my own notes\n"
+    assert "without the BYOLSP marker" in capsys.readouterr().out
+    assert load_repo_config(repo).agents == []
+
+
+def test_hook_uninstall_removes_the_installed_adapter(home: Path) -> None:
+    repo = make_repo(home, "repo", "--agents", "codex")
+
+    assert hook("uninstall", repo, "codex") == 0
+
+    assert not (repo / AGENTS_DIR / "codex.md").exists()
+    assert load_repo_config(repo).agents == []
+    # Idempotent: a second uninstall has nothing to do and still succeeds.
+    assert hook("uninstall", repo, "codex") == 0
+
+
+def test_hook_uninstall_claude_code_removes_only_the_byolsp_settings_group(
+    home: Path,
+) -> None:
+    repo = make_repo(home)
+    user_group = {"matcher": "Bash", "hooks": [{"type": "command", "command": "true"}]}
+    (repo / ".claude").mkdir()
+    settings = repo / ".claude" / "settings.json"
+    settings.write_text(json.dumps({"hooks": {"PostToolUse": [user_group]}}))
+    hook("install", repo, "claude-code")
+
+    assert hook("uninstall", repo, "claude-code") == 0
+
+    data = json.loads(settings.read_text())
+    assert data["hooks"]["PostToolUse"] == [user_group]
+    assert "byolsp agent-check" not in settings.read_text()
