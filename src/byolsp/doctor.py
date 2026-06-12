@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from byolsp.agents import AGENT_INSTRUCTIONS_RELPATH
@@ -47,13 +48,7 @@ def run_doctor(args: argparse.Namespace) -> int:
     checks = collect_checks(repo_root, global_config_dir(), quick=args.quick)
     ok = all(check.ok for check in checks)
     if args.json:
-        payload = {
-            "ok": ok,
-            "checks": [
-                {"id": check.id, "ok": check.ok, "message": check.message}
-                for check in checks
-            ],
-        }
+        payload = {"ok": ok, "checks": [asdict(check) for check in checks]}
         print(json.dumps(payload, indent=2))
     else:
         for line in render_checks(checks):
@@ -166,9 +161,12 @@ def _rule_checks(repo_root: Path, paths: RepoPaths, config_dir: Path) -> list[Ch
 def _registry_check(config_dir: Path, global_config: GlobalConfig) -> Check:
     repos = load_repo_registry(repo_registry_path(config_dir, global_config))
     problems = [f"{repo} no longer exists" for repo in repos if not repo.is_dir()]
-    resolved = [repo.resolve() for repo in repos]
-    duplicated = sorted({str(repo) for repo in resolved if resolved.count(repo) > 1})
-    problems.extend(f"duplicate registry entries for {repo}" for repo in duplicated)
+    tallies = Counter(repo.resolve() for repo in repos)
+    problems.extend(
+        f"duplicate registry entries for {repo}"
+        for repo, count in sorted(tallies.items())
+        if count > 1
+    )
     if problems:
         return Check("registered_repos", False, "; ".join(problems))
     return Check("registered_repos", True, "all registered repository paths exist")

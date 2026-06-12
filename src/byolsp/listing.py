@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -14,8 +14,6 @@ from byolsp.rules import load_rules
 from byolsp.sync import load_canonical_rules, repo_sync_plan
 
 ListScope = Literal["project", "local", "global", "effective", "all"]
-
-LIST_SCOPES = ("project", "local", "global", "effective", "all")
 
 
 @dataclass
@@ -30,13 +28,11 @@ def run_list(args: argparse.Namespace) -> int:
     repo_root = resolve_repo_root(explicit=args.repo)
     scope: ListScope = args.scope
     rules = collect_rules(repo_root, scope)
-    skipped = (
-        collect_skipped(repo_root, global_config_dir()) if scope == "all" else None
-    )
+    skipped = collect_skipped(repo_root, global_config_dir()) if scope == "all" else []
     if args.json:
         print(json.dumps(_json_payload(rules, skipped), indent=2))
     else:
-        for line in render_listing(rules, skipped or []):
+        for line in render_listing(rules, skipped):
             print(line)
     return 0
 
@@ -89,15 +85,9 @@ def render_listing(
 
 
 def _json_payload(
-    rules: list[ListedRule], skipped: list[tuple[str, str]] | None
+    rules: list[ListedRule], skipped: list[tuple[str, str]]
 ) -> dict[str, list[dict[str, str]]]:
-    payload = {
-        "rules": [
-            {"scope": rule.scope, "id": rule.id, "path": rule.path} for rule in rules
-        ]
+    return {
+        "rules": [asdict(rule) for rule in rules],
+        "skipped": [{"id": rule_id, "reason": reason} for rule_id, reason in skipped],
     }
-    if skipped is not None:
-        payload["skipped"] = [
-            {"id": rule_id, "reason": reason} for rule_id, reason in skipped
-        ]
-    return payload

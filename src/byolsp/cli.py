@@ -113,7 +113,7 @@ def _add_list_arguments(command: argparse.ArgumentParser) -> None:
     _add_repo_argument(command)
     command.add_argument(
         "--scope",
-        # Mirrors listing.LIST_SCOPES; spelled out so --help stays import-light.
+        # Spelled out so --help stays import-light; keep in sync with listing.ListScope.
         choices=("project", "local", "global", "effective", "all"),
         default="effective",
         help="Which rules to show (default: effective, what ast-grep sees)",
