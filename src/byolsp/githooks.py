@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 from byolsp.errors import ConfigError
-from byolsp.fsio import write_text_atomic
+from byolsp.fsio import write_marked_text
 
 SHIM_HOOK_NAMES = ("post-merge", "post-checkout")
 
@@ -46,17 +46,15 @@ def install_git_shims(repo_root: Path) -> list[str]:
 
 
 def _install_shim(hook: Path) -> list[str]:
-    if hook.is_file():
-        content = hook.read_text(encoding="utf-8")
-        if SHIM_MARKER not in content:
-            return [
-                f".git/hooks/{hook.name} exists without the BYOLSP marker; "
-                "add this line to it:",
-                f"  {SHIM_LINE}",
-            ]
-        if content == SHIM_CONTENT:
-            return []
-    write_text_atomic(hook, SHIM_CONTENT)
+    result = write_marked_text(hook, SHIM_CONTENT, SHIM_MARKER)
+    if result == "unmarked":
+        return [
+            f".git/hooks/{hook.name} exists without the BYOLSP marker; "
+            "add this line to it:",
+            f"  {SHIM_LINE}",
+        ]
+    if result == "unchanged":
+        return []
     hook.chmod(hook.stat().st_mode | 0o111)
     return [f"Installed .git/hooks/{hook.name}"]
 

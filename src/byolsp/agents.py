@@ -10,7 +10,7 @@ from typing import TypeAlias
 
 from byolsp.config import load_repo_config, save_repo_config
 from byolsp.errors import ConfigError
-from byolsp.fsio import write_text_atomic
+from byolsp.fsio import write_marked_text, write_text_atomic
 from byolsp.paths import resolve_repo_root
 
 JsonValue: TypeAlias = (
@@ -168,15 +168,11 @@ def _claude_code_instructions() -> str:
 
 
 def _write_managed_file(repo_root: Path, relpath: str, content: str) -> list[str]:
-    """Write a marker-carrying file; never touch an unmarked one (SPEC 17)."""
-    path = repo_root / relpath
-    if path.is_file():
-        existing = path.read_text(encoding="utf-8")
-        if MANAGED_MARKER not in existing:
-            return [f"{relpath} exists without the BYOLSP marker; left untouched."]
-        if existing == content:
-            return []
-    write_text_atomic(path, content)
+    result = write_marked_text(repo_root / relpath, content, MANAGED_MARKER)
+    if result == "unmarked":
+        return [f"{relpath} exists without the BYOLSP marker; left untouched."]
+    if result == "unchanged":
+        return []
     return [f"Wrote {relpath}"]
 
 

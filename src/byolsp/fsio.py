@@ -6,8 +6,26 @@ import os
 import stat
 import tempfile
 from pathlib import Path
+from typing import Literal
 
 NEW_FILE_MODE = 0o666
+
+MarkedWriteResult = Literal["written", "unchanged", "unmarked"]
+
+
+def write_marked_text(path: Path, content: str, marker: str) -> MarkedWriteResult:
+    """Converge a BYOLSP-managed file to `content` (SPEC 17).
+
+    Files without the marker are user-owned and never touched.
+    """
+    if path.is_file():
+        existing = path.read_text(encoding="utf-8")
+        if marker not in existing:
+            return "unmarked"
+        if existing == content:
+            return "unchanged"
+    write_text_atomic(path, content)
+    return "written"
 
 
 def write_text_atomic(path: Path, content: str) -> None:
