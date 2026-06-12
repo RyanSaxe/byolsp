@@ -46,8 +46,9 @@ changed something:
 byolsp: synced 2 updated global rules
 ```
 
-The exceptions: `byolsp sync` itself (its body is the sync) and
-`byolsp sync --check`, which reports without writing and exits 3 when stale.
+The exceptions: `byolsp sync` itself (its body is the sync),
+`byolsp sync --check`, which reports without writing and exits 3 when stale,
+and `byolsp init`, which runs a full sync as one of its steps.
 
 ```bash
 byolsp sync           # mirror this repo
