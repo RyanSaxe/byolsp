@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from byolsp.agents import AGENT_CHOICES, install_agent_instructions
@@ -12,6 +12,7 @@ from byolsp.config import (
     GlobalConfig,
     LocalConfig,
     RepoConfig,
+    RepoPaths,
     global_config_path,
     global_rules_dir,
     load_global_config,
@@ -38,11 +39,13 @@ GIT_HOOKS_NOTICE = (
 
 @dataclass
 class InitOptions:
-    agents: list[str] = field(default_factory=list)
-    ignore_mode: IgnoreMode = "project"
-    git_hooks: bool = False
-    register: bool = True
-    replace_sgconfig: bool = False
+    """Fully resolved init choices; defaults live in _options_from_args."""
+
+    agents: list[str]
+    ignore_mode: IgnoreMode
+    git_hooks: bool
+    register: bool
+    replace_sgconfig: bool
 
 
 def run_init(args: argparse.Namespace) -> int:
@@ -61,14 +64,9 @@ def initialize_repo(
     messages: list[str] = []
     global_config = _bootstrap_global_dir(config_dir)
     repo_config = _ensure_repo_layout(repo_root, options.agents)
-    rule_dirs = [
-        repo_config.paths.project_rules,
-        repo_config.paths.personal_local_rules,
-        repo_config.paths.personal_global_rules,
-    ]
     sgconfig_message = ensure_rule_dirs(
         repo_root / repo_config.paths.sgconfig,
-        rule_dirs,
+        _rule_dirs(repo_config.paths),
         replace=options.replace_sgconfig,
     )
     if sgconfig_message is not None:
@@ -90,9 +88,11 @@ def initialize_repo(
 
 def _bootstrap_global_dir(config_dir: Path) -> GlobalConfig:
     """Create the global dir, config, rules dir, and repo registry if missing."""
-    if not global_config_path(config_dir).is_file():
-        save_global_config(config_dir, GlobalConfig())
-    config = load_global_config(config_dir)
+    if global_config_path(config_dir).is_file():
+        config = load_global_config(config_dir)
+    else:
+        config = GlobalConfig()
+        save_global_config(config_dir, config)
     global_rules_dir(config_dir, config).mkdir(parents=True, exist_ok=True)
     registry_path = repo_registry_path(config_dir, config)
     if not registry_path.is_file():
@@ -109,15 +109,19 @@ def _ensure_repo_layout(repo_root: Path, agents: list[str]) -> RepoConfig:
         save_repo_config(repo_root, config)
     if not local_config_path(repo_root).is_file():
         save_local_config(repo_root, LocalConfig())
-    for rules_dir in (
-        config.paths.project_rules,
-        config.paths.personal_local_rules,
-        config.paths.personal_global_rules,
-    ):
+    for rules_dir in _rule_dirs(config.paths):
         gitkeep = repo_root / rules_dir / ".gitkeep"
         gitkeep.parent.mkdir(parents=True, exist_ok=True)
         gitkeep.touch(exist_ok=True)
     return config
+
+
+def _rule_dirs(paths: RepoPaths) -> list[str]:
+    return [
+        paths.project_rules,
+        paths.personal_local_rules,
+        paths.personal_global_rules,
+    ]
 
 
 def _load_or_default_repo_config(repo_root: Path) -> RepoConfig:
@@ -164,9 +168,7 @@ def _parse_agents(raw: str) -> list[str]:
 
 
 def _prompt_agents() -> list[str]:
-    print("AI integrations to install:")
-    for number, name in enumerate(AGENT_CHOICES, start=1):
-        print(f"  {number}. {name}")
+    _print_options("AI integrations to install:", AGENT_CHOICES)
     while True:
         raw = _ask("Enter numbers separated by commas", default="1")
         agents = _numbers_to_choices(raw, AGENT_CHOICES)
@@ -176,29 +178,35 @@ def _prompt_agents() -> list[str]:
 
 
 def _prompt_ignore_mode() -> IgnoreMode:
-    print("Where should byolsp write its git ignore entries?")
-    print("  1. project .gitignore (team-visible)")
-    print("  2. local .git/info/exclude (private)")
-    while True:
-        raw = _ask("Enter a number", default="1")
-        if raw == "1":
-            return "project"
-        if raw == "2":
-            return "local"
-        print("Please enter 1 or 2.")
+    choice = _prompt_choice(
+        "Where should byolsp write its git ignore entries?",
+        ("project .gitignore (team-visible)", "local .git/info/exclude (private)"),
+    )
+    return "local" if choice == 1 else "project"
 
 
 def _prompt_git_hooks() -> bool:
-    print("Install git hook shims that run `byolsp sync` after merge and checkout?")
-    print("  1. no")
-    print("  2. yes")
+    choice = _prompt_choice(
+        "Install git hook shims that run `byolsp sync` after merge and checkout?",
+        ("no", "yes"),
+    )
+    return choice == 1
+
+
+def _prompt_choice(intro: str, options: Sequence[str]) -> int:
+    """Ask a numbered single-choice question; returns the zero-based index."""
+    _print_options(intro, options)
     while True:
         raw = _ask("Enter a number", default="1")
-        if raw == "1":
-            return False
-        if raw == "2":
-            return True
-        print("Please enter 1 or 2.")
+        if raw.isdigit() and 1 <= int(raw) <= len(options):
+            return int(raw) - 1
+        print(f"Please enter a number between 1 and {len(options)}.")
+
+
+def _print_options(intro: str, options: Sequence[str]) -> None:
+    print(intro)
+    for number, option in enumerate(options, start=1):
+        print(f"  {number}. {option}")
 
 
 def _ask(question: str, default: str) -> str:
