@@ -19,8 +19,9 @@ SKILL_DESCRIPTION = (
     "Capture durable, mechanically checkable code feedback as ast-grep rules. "
     "Trigger when the user states a lasting preference about code syntax or "
     'structure — "never use X", "always do Y", "stop doing Z" — that a syntax '
-    "pattern can check. Do not trigger on one-off requests, vague philosophy, "
-    "or preferences no ast-grep pattern can express."
+    "pattern can check. Do not trigger on one-off requests about the current "
+    "change or vague philosophy. If the preference cannot be expressed as a "
+    "syntax pattern, follow the skill's decline guidance."
 )
 
 SKILL_BODY = """\
@@ -42,7 +43,8 @@ Do not act on:
 
 - One-off requests about the current change ("remove this print")
 - Vague philosophy ("keep it simple", "make this more readable")
-- Preferences no syntax pattern can detect (naming taste, architecture)
+- Preferences no syntax pattern can detect (naming taste, architecture) —
+  decline these as described in "When to Decline" below
 
 ## Workflow
 
@@ -95,8 +97,13 @@ byolsp add --scope SCOPE --from FILE
 
 This validates the rule, syncs it into place, and runs doctor. Then prove the
 rule catches the violation: write a minimal offending snippet to a scratch
-file, run `ast-grep scan` on it, confirm the diagnostic fires, and delete the
-snippet.
+file inside the repository (`ast-grep scan` only applies the project's rules
+to files under the repo root — a snippet in /tmp matches nothing), run the
+scan from the repo root, confirm the rule id appears, and delete the snippet:
+
+```bash
+ast-grep scan scratch_violation.py
+```
 
 ## When to Decline
 
@@ -140,8 +147,9 @@ above at project scope — create it?" On yes:
 byolsp add --scope project --from /tmp/no-print-logging.yml
 ```
 
-Verify: write `print("debug")` to a scratch file, run `ast-grep scan` on it,
-and confirm the `no-print-logging` diagnostic appears.
+Verify: write `print("debug")` to `scratch_violation.py` at the repo root,
+run `ast-grep scan scratch_violation.py` from the repo root, confirm the
+`no-print-logging` diagnostic appears, then delete the file.
 
 ## ast-grep Pattern Primer
 
