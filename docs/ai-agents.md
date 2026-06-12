@@ -78,8 +78,8 @@ the hook can never block the agent loop.
 ## Installing and removing integrations
 
 ```bash
-byolsp hook install --agent generic|claude-code|codex|copilot|skill
-byolsp hook uninstall --agent generic|claude-code|codex|copilot|skill
+byolsp hook install --agent generic|claude-code|codex|copilot|opencode|skill
+byolsp hook uninstall --agent generic|claude-code|codex|copilot|opencode|skill
 ```
 
 `byolsp init` also installs the agents you select (interactively or via
@@ -88,9 +88,9 @@ recorded under `ai.agents` in `.byolsp/config.yml`, which `doctor` and
 `hook uninstall` use.
 
 Generated files carry the marker
-`<!-- Managed by BYOLSP. Manual edits may be overwritten. -->`. `uninstall`
-removes only marker-bearing files; anything you edited (the marker removed) is
-preserved with a message.
+`<!-- Managed by BYOLSP. Manual edits may be overwritten. -->` (a `//` comment
+equivalent in TypeScript). `uninstall` removes only marker-bearing files;
+anything you edited (the marker removed) is preserved with a message.
 
 ## Per-agent status
 
@@ -100,6 +100,7 @@ preserved with a message.
 | `claude-code` | Real PostToolUse hook when `.claude/` exists; otherwise instruction file `.byolsp/agents/claude-code.md` with the exact wiring |
 | `codex` | Instruction file `.byolsp/agents/codex.md`; copy the instruction into `AGENTS.md` |
 | `copilot` | Instruction file `.byolsp/agents/copilot.md`; copy the instruction into `.github/copilot-instructions.md` |
+| `opencode` | Real post-edit plugin `.opencode/plugin/byolsp.ts` plus instruction file `.byolsp/agents/opencode.md` |
 | `skill` | Rule-capture skill rendered identically into `.agents/skills/byolsp/SKILL.md` and `.claude/skills/byolsp/SKILL.md`; installed by `init` by default |
 
 ### skill
@@ -116,6 +117,16 @@ The two render locations cover every major harness natively (Claude Code
 reads `.claude/skills/`; Codex, Copilot, and OpenCode read `.agents/skills/`).
 `doctor` checks both renders exist and match the packaged content when
 `skill` is in `ai.agents`.
+
+### opencode
+
+OpenCode supports real post-edit hooks through TypeScript plugins. Install
+writes `.opencode/plugin/byolsp.ts`, which hooks `tool.execute.after`: when
+the tool is `edit`, `write`, or `apply_patch`, it runs
+`byolsp agent-check --files <file>` on the touched file and, on exit 2,
+appends the diagnostics to the tool output the model sees. Any other exit
+code appends nothing, so a byolsp configuration error never breaks the agent
+loop.
 
 ### claude-code
 

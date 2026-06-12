@@ -1,0 +1,52 @@
+"""The OpenCode adapter: a real post-edit plugin (SPEC 27.3).
+
+OpenCode discovers TypeScript plugins under .opencode/plugin/. Ours hooks
+tool.execute.after for the file-mutating tools, runs agent-check on the
+touched file, and appends any diagnostics to the tool output the model sees.
+A `//` comment marker stands in for the HTML-comment marker, which is not
+valid TypeScript (SPEC 17).
+"""
+
+from __future__ import annotations
+
+OPENCODE_PLUGIN_RELPATH = ".opencode/plugin/byolsp.ts"
+
+OPENCODE_MARKER = "// Managed by BYOLSP. Manual edits may be overwritten."
+
+OPENCODE_PLUGIN = (
+    OPENCODE_MARKER
+    + """
+//
+// Runs `byolsp agent-check` after every file-mutating tool call and appends
+// any diagnostics to the tool output so the model fixes them immediately.
+import type { Plugin } from "@opencode-ai/plugin"
+
+const FILE_MUTATING_TOOLS = new Set(["edit", "write", "apply_patch"])
+
+const DIAGNOSTICS_EXIT_CODE = 2
+
+const filePathArgument = (args: unknown): string | undefined => {
+  if (typeof args !== "object" || args === null) return undefined
+  for (const key of ["filePath", "file_path", "path"]) {
+    const value = Reflect.get(args, key)
+    if (typeof value === "string") return value
+  }
+  return undefined
+}
+
+export const ByolspPlugin: Plugin = async ({ $ }) => ({
+  "tool.execute.after": async (input, output) => {
+    if (!FILE_MUTATING_TOOLS.has(input.tool)) return
+    const filePath = filePathArgument(input.args)
+    if (filePath === undefined) return
+    // nothrow: a byolsp config error (exit 1) must never break the agent loop.
+    const result = await $`byolsp agent-check --files ${filePath}`
+      .quiet()
+      .nothrow()
+    if (result.exitCode === DIAGNOSTICS_EXIT_CODE) {
+      output.output += `\\n\\n${result.text()}`
+    }
+  },
+})
+"""
+)

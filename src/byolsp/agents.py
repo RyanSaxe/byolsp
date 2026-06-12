@@ -17,6 +17,7 @@ from byolsp.fsio import (
     write_marked_text,
     write_text_atomic,
 )
+from byolsp.opencode import OPENCODE_MARKER, OPENCODE_PLUGIN, OPENCODE_PLUGIN_RELPATH
 from byolsp.paths import resolve_repo_root
 from byolsp.skill import SKILL_MARKDOWN, SKILL_RELPATHS
 
@@ -24,7 +25,7 @@ JsonValue: TypeAlias = (
     "None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]"
 )
 
-AGENT_CHOICES = ("generic", "claude-code", "codex", "copilot", "skill")
+AGENT_CHOICES = ("generic", "claude-code", "codex", "copilot", "opencode", "skill")
 
 AGENT_INSTRUCTIONS_RELPATH = ".byolsp/agents/README.md"
 
@@ -54,6 +55,13 @@ code when the code is genuinely necessary and add a concise comment explaining w
 
 GENERIC_AGENT_INSTRUCTIONS = (
     f"{MANAGED_MARKER}\n\n# BYOLSP Agent Instructions\n\n{CORE_INSTRUCTION}"
+)
+
+# SPEC 27.4: every harness that auto-discovers skills gets the capture loop.
+SKILL_DISCOVERY_NOTE = (
+    "{harness} also auto-discovers the `byolsp` rule-capture skill at\n"
+    "`.agents/skills/byolsp/SKILL.md`, which turns your durable feedback\n"
+    "into new ast-grep rules."
 )
 
 
@@ -99,6 +107,8 @@ def install_agent(repo_root: Path, agent: str) -> list[str]:
         return _install_claude_code(repo_root)
     if agent == "skill":
         return _install_skill(repo_root)
+    if agent == "opencode":
+        return _install_opencode(repo_root)
     return _write_managed_file(
         repo_root, _instructions_relpath(agent), _agent_instructions(agent)
     )
@@ -113,6 +123,12 @@ def uninstall_agent(repo_root: Path, agent: str) -> list[str]:
         return messages
     if agent == "claude-code":
         messages.extend(_remove_claude_code_hook(repo_root))
+    if agent == "opencode":
+        messages.extend(
+            _remove_managed_file(
+                repo_root, OPENCODE_PLUGIN_RELPATH, marker=OPENCODE_MARKER
+            )
+        )
     messages.extend(_remove_managed_file(repo_root, _instructions_relpath(agent)))
     return messages
 
@@ -126,6 +142,8 @@ def agent_file_problems(repo_root: Path, agents: Sequence[str]) -> list[str]:
             continue
         if agent == "claude-code" and _claude_code_installed(repo_root):
             continue
+        if agent == "opencode" and not (repo_root / OPENCODE_PLUGIN_RELPATH).is_file():
+            problems.append(f"{OPENCODE_PLUGIN_RELPATH} is missing")
         relpath = _instructions_relpath(agent)
         if not (repo_root / relpath).is_file():
             problems.append(f"{relpath} is missing")
@@ -137,6 +155,21 @@ def _install_skill(repo_root: Path) -> list[str]:
     messages: list[str] = []
     for relpath in SKILL_RELPATHS:
         messages.extend(_write_managed_file(repo_root, relpath, SKILL_MARKDOWN))
+    return messages
+
+
+def _install_opencode(repo_root: Path) -> list[str]:
+    """A real post-edit plugin plus the standard instruction file (SPEC 27.3)."""
+    messages = _write_managed_file(
+        repo_root, OPENCODE_PLUGIN_RELPATH, OPENCODE_PLUGIN, marker=OPENCODE_MARKER
+    )
+    messages.extend(
+        _write_managed_file(
+            repo_root,
+            _instructions_relpath("opencode"),
+            _agent_instructions("opencode"),
+        )
+    )
     return messages
 
 
@@ -166,6 +199,7 @@ def _instructions_relpath(agent: str) -> str:
 def _agent_instructions(agent: str) -> str:
     if agent == "generic":
         return GENERIC_AGENT_INSTRUCTIONS
+    titles = {"codex": "Codex", "copilot": "Copilot", "opencode": "OpenCode"}
     notes = {
         "codex": (
             "Codex reads repository guidance from `AGENTS.md`. Copy the\n"
@@ -177,8 +211,14 @@ def _agent_instructions(agent: str) -> str:
             "`.github/copilot-instructions.md`. Copy the instruction above into\n"
             "that file so Copilot checks its changes automatically."
         ),
+        "opencode": (
+            "OpenCode runs the check automatically: the BYOLSP plugin at\n"
+            f"`{OPENCODE_PLUGIN_RELPATH}` hooks `tool.execute.after` and appends\n"
+            "any diagnostics to the tool output after every file edit.\n\n"
+            f"{SKILL_DISCOVERY_NOTE.format(harness='OpenCode')}"
+        ),
     }
-    return _instruction_file(f"BYOLSP {agent.title()} Instructions", notes[agent])
+    return _instruction_file(f"BYOLSP {titles[agent]} Instructions", notes[agent])
 
 
 def _instruction_file(title: str, wiring_note: str) -> str:
@@ -200,8 +240,10 @@ def _claude_code_instructions() -> str:
     return _instruction_file("BYOLSP Claude Code Instructions", note)
 
 
-def _write_managed_file(repo_root: Path, relpath: str, content: str) -> list[str]:
-    result = write_marked_text(repo_root / relpath, content, MANAGED_MARKER)
+def _write_managed_file(
+    repo_root: Path, relpath: str, content: str, marker: str = MANAGED_MARKER
+) -> list[str]:
+    result = write_marked_text(repo_root / relpath, content, marker)
     if result == "unmarked":
         return [f"{relpath} exists without the BYOLSP marker; left untouched."]
     if result == "unchanged":
@@ -209,11 +251,13 @@ def _write_managed_file(repo_root: Path, relpath: str, content: str) -> list[str
     return [f"Wrote {relpath}"]
 
 
-def _remove_managed_file(repo_root: Path, relpath: str) -> list[str]:
+def _remove_managed_file(
+    repo_root: Path, relpath: str, marker: str = MANAGED_MARKER
+) -> list[str]:
     path = repo_root / relpath
     if not path.is_file():
         return []
-    if MANAGED_MARKER not in path.read_text(encoding="utf-8"):
+    if marker not in path.read_text(encoding="utf-8"):
         return [f"{relpath} exists without the BYOLSP marker; left untouched."]
     path.unlink()
     return [f"Removed {relpath}"]
