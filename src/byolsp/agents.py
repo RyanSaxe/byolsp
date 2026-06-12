@@ -131,8 +131,6 @@ def _instructions_relpath(agent: str) -> str:
 def _agent_instructions(agent: str) -> str:
     if agent == "generic":
         return GENERIC_AGENT_INSTRUCTIONS
-    if agent == "claude-code":
-        return _claude_code_instructions()
     notes = {
         "codex": (
             "Codex reads repository guidance from `AGENTS.md`. Copy the\n"
@@ -197,7 +195,7 @@ def _install_claude_code(repo_root: Path) -> list[str]:
     groups = _post_tool_use_groups(settings)
     if any(_contains_byolsp_command(group) for group in groups):
         return []
-    groups.append(_claude_hook_group())
+    _set_post_tool_use_groups(settings, [*groups, _claude_hook_group()])
     _save_claude_settings(settings_path, settings)
     return [f"Installed a PostToolUse hook in {CLAUDE_SETTINGS_RELPATH}"]
 
@@ -227,21 +225,11 @@ def _remove_claude_code_hook(repo_root: Path) -> list[str]:
     if not settings_path.is_file():
         return []
     settings = _load_claude_settings(settings_path)
-    hooks = settings.get("hooks")
-    if not isinstance(hooks, dict):
-        return []
-    groups = hooks.get("PostToolUse")
-    if not isinstance(groups, list):
-        return []
+    groups = _post_tool_use_groups(settings)
     kept = [group for group in groups if not _is_byolsp_group(group)]
     if len(kept) == len(groups):
         return []
-    if kept:
-        hooks["PostToolUse"] = kept
-    else:
-        del hooks["PostToolUse"]
-        if not hooks:
-            del settings["hooks"]
+    _set_post_tool_use_groups(settings, kept)
     _save_claude_settings(settings_path, settings)
     return [f"Removed the BYOLSP PostToolUse hook from {CLAUDE_SETTINGS_RELPATH}"]
 
@@ -252,12 +240,8 @@ def _is_byolsp_group(group: JsonValue) -> bool:
     A group where a user mixed in their own hooks counts as user-edited and is
     preserved, matching the managed-marker rule for files.
     """
-    if not isinstance(group, dict):
-        return False
-    hooks = group.get("hooks")
-    if not isinstance(hooks, list) or not hooks:
-        return False
-    return all(_is_byolsp_command(hook) for hook in hooks)
+    hooks = _group_hooks(group)
+    return bool(hooks) and all(_is_byolsp_command(hook) for hook in hooks)
 
 
 def _claude_hook_group() -> dict[str, JsonValue]:
@@ -288,13 +272,17 @@ def _save_claude_settings(path: Path, settings: dict[str, JsonValue]) -> None:
 
 
 def _post_tool_use_groups(settings: dict[str, JsonValue]) -> list[JsonValue]:
-    """The hooks.PostToolUse list, created in place when absent."""
-    hooks = settings.setdefault("hooks", {})
+    """The hooks.PostToolUse list, [] when absent; raises on malformed types."""
+    hooks = settings.get("hooks")
+    if hooks is None:
+        return []
     if not isinstance(hooks, dict):
         raise ConfigError(
             f"{CLAUDE_SETTINGS_RELPATH}: expected 'hooks' to be an object"
         )
-    groups = hooks.setdefault("PostToolUse", [])
+    groups = hooks.get("PostToolUse")
+    if groups is None:
+        return []
     if not isinstance(groups, list):
         raise ConfigError(
             f"{CLAUDE_SETTINGS_RELPATH}: expected hooks.PostToolUse to be a list"
@@ -302,13 +290,32 @@ def _post_tool_use_groups(settings: dict[str, JsonValue]) -> list[JsonValue]:
     return groups
 
 
-def _contains_byolsp_command(group: JsonValue) -> bool:
+def _set_post_tool_use_groups(
+    settings: dict[str, JsonValue], groups: list[JsonValue]
+) -> None:
+    """Replace hooks.PostToolUse, dropping empty containers it leaves behind."""
+    hooks = settings.get("hooks")
+    if not isinstance(hooks, dict):
+        hooks = {}
+        settings["hooks"] = hooks
+    if groups:
+        hooks["PostToolUse"] = groups
+    else:
+        hooks.pop("PostToolUse", None)
+        if not hooks:
+            del settings["hooks"]
+
+
+def _group_hooks(group: JsonValue) -> list[JsonValue]:
+    """The group's hooks list, or [] when the group is not shaped like one."""
     if not isinstance(group, dict):
-        return False
+        return []
     hooks = group.get("hooks")
-    if not isinstance(hooks, list):
-        return False
-    return any(_is_byolsp_command(hook) for hook in hooks)
+    return hooks if isinstance(hooks, list) else []
+
+
+def _contains_byolsp_command(group: JsonValue) -> bool:
+    return any(_is_byolsp_command(hook) for hook in _group_hooks(group))
 
 
 def _is_byolsp_command(hook: JsonValue) -> bool:
