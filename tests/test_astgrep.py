@@ -85,17 +85,17 @@ def test_unreadable_version_fails_cleanly(bin_dir: Path) -> None:
         ast_grep_version(broken)
 
 
-CAST_RULE = (
-    "id: no-python-cast\n"
-    "language: Python\n"
-    "severity: warning\n"
-    "message: Avoid typing.cast in Python code.\n"
-    "rule:\n"
-    "  pattern: cast($TYPE, $VALUE)\n"
-    "metadata:\n"
-    "  byolsp:\n"
-    "    agent_prompt: Fix the type by narrowing instead.\n"
-)
+CAST_RULE = """\
+id: no-python-cast
+language: Python
+severity: warning
+message: Avoid typing.cast in Python code.
+rule:
+  pattern: cast($TYPE, $VALUE)
+metadata:
+  byolsp:
+    agent_prompt: Fix the type by narrowing instead.
+"""
 
 
 def ast_grep_project(root: Path, rule: str = CAST_RULE) -> Path:

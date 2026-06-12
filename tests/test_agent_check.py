@@ -42,11 +42,14 @@ rule:
 """
 
 
-def make_check_repo(home: Path) -> Path:
+@pytest.fixture
+def check_repo(home: Path, capsys: pytest.CaptureFixture[str]) -> Path:
+    """An initialized repo with both rules, init output already flushed."""
     repo = make_repo(home)
     project = repo / ".byolsp" / "rules" / "project"
     (project / "no-python-cast.yml").write_text(CAST_RULE)
     (project / "no-print.yml").write_text(PRINT_RULE)
+    capsys.readouterr()
     return repo
 
 
@@ -55,29 +58,23 @@ def check(repo: Path, *extra: str) -> int:
 
 
 def test_clean_files_exit_zero_with_no_output(
-    home: Path, capsys: pytest.CaptureFixture[str]
+    check_repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    repo = make_check_repo(home)
-    source = repo / "src.py"
+    source = check_repo / "src.py"
     source.write_text("x = 1\n")
 
-    capsys.readouterr()
-
-    assert check(repo, "--files", str(source)) == 0
+    assert check(check_repo, "--files", str(source)) == 0
 
     assert capsys.readouterr().out == ""
 
 
 def test_one_diagnostic_renders_the_spec_block(
-    home: Path, capsys: pytest.CaptureFixture[str]
+    check_repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    repo = make_check_repo(home)
-    source = repo / "src.py"
+    source = check_repo / "src.py"
     source.write_text('from typing import cast\nx = cast(int, "1")\n')
 
-    capsys.readouterr()
-
-    assert check(repo, "--files", str(source)) == 2
+    assert check(check_repo, "--files", str(source)) == 2
 
     assert capsys.readouterr().out == (
         "BYOLSP found 1 issue in AI-written code.\n"
@@ -94,15 +91,12 @@ def test_one_diagnostic_renders_the_spec_block(
 
 
 def test_instruction_falls_back_to_message(
-    home: Path, capsys: pytest.CaptureFixture[str]
+    check_repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    repo = make_check_repo(home)
-    source = repo / "src.py"
+    source = check_repo / "src.py"
     source.write_text('print("hi")\n')
 
-    capsys.readouterr()
-
-    assert check(repo, "--files", str(source)) == 2
+    assert check(check_repo, "--files", str(source)) == 2
 
     out = capsys.readouterr().out
     assert "Severity: error" in out
@@ -110,18 +104,15 @@ def test_instruction_falls_back_to_message(
 
 
 def test_diagnostics_group_by_file_then_sort_by_line_and_rule_id(
-    home: Path, capsys: pytest.CaptureFixture[str]
+    check_repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    repo = make_check_repo(home)
-    first = repo / "a.py"
+    first = check_repo / "a.py"
     # Both rules match line 1; rule-ID order (no-print first) beats column order.
     first.write_text('y = cast(int, print("x"))\nz = cast(str, 2)\n')
-    second = repo / "b.py"
+    second = check_repo / "b.py"
     second.write_text("x = cast(int, 1)\n")
 
-    capsys.readouterr()
-
-    assert check(repo, "--files", str(second), str(first)) == 2
+    assert check(check_repo, "--files", str(second), str(first)) == 2
 
     out = capsys.readouterr().out
     locations = re.findall(r"^\S+\.py:\d+:\d+$", out, flags=re.MULTILINE)
@@ -129,15 +120,12 @@ def test_diagnostics_group_by_file_then_sort_by_line_and_rule_id(
 
 
 def test_renders_at_most_twenty_diagnostics_with_overflow_line(
-    home: Path, capsys: pytest.CaptureFixture[str]
+    check_repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    repo = make_check_repo(home)
-    source = repo / "src.py"
+    source = check_repo / "src.py"
     source.write_text("".join(f"v{i} = cast(int, {i})\n" for i in range(21)))
 
-    capsys.readouterr()
-
-    assert check(repo, "--files", str(source)) == 2
+    assert check(check_repo, "--files", str(source)) == 2
 
     out = capsys.readouterr().out
     assert out.startswith("BYOLSP found 21 issues in AI-written code.\n")
@@ -148,15 +136,12 @@ def test_renders_at_most_twenty_diagnostics_with_overflow_line(
 
 
 def test_max_results_is_forwarded_to_ast_grep(
-    home: Path, capsys: pytest.CaptureFixture[str]
+    check_repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    repo = make_check_repo(home)
-    source = repo / "src.py"
+    source = check_repo / "src.py"
     source.write_text("".join(f"v{i} = cast(int, {i})\n" for i in range(3)))
 
-    capsys.readouterr()
-
-    assert check(repo, "--files", str(source), "--max-results", "1") == 2
+    assert check(check_repo, "--files", str(source), "--max-results", "1") == 2
 
     out = capsys.readouterr().out
     assert out.startswith("BYOLSP found 1 issue in AI-written code.\n")
@@ -164,14 +149,11 @@ def test_max_results_is_forwarded_to_ast_grep(
 
 
 def test_json_format_emits_one_issue_per_diagnostic(
-    home: Path, capsys: pytest.CaptureFixture[str]
+    check_repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    repo = make_check_repo(home)
-    (repo / "src.py").write_text('x = cast(int, "1")\n')
+    (check_repo / "src.py").write_text('x = cast(int, "1")\n')
 
-    capsys.readouterr()
-
-    assert check(repo, "--format", "json") == 2  # no --files scans the repo
+    assert check(check_repo, "--format", "json") == 2  # no --files scans the repo
 
     payload = json.loads(capsys.readouterr().out)
     assert payload == {
@@ -191,15 +173,12 @@ def test_json_format_emits_one_issue_per_diagnostic(
 
 
 def test_scan_failure_is_a_clean_tool_error(
-    home: Path, capsys: pytest.CaptureFixture[str]
+    check_repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    repo = make_check_repo(home)
-    (repo / "sgconfig.yml").write_text("ruleDirs: 5\n")
-    (repo / "src.py").write_text("x = 1\n")
+    (check_repo / "sgconfig.yml").write_text("ruleDirs: 5\n")
+    (check_repo / "src.py").write_text("x = 1\n")
 
-    capsys.readouterr()
-
-    assert check(repo, "--files", str(repo / "src.py")) == 1
+    assert check(check_repo, "--files", str(check_repo / "src.py")) == 1
 
     captured = capsys.readouterr()
     assert "scan` failed" in captured.err
