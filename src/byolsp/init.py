@@ -30,7 +30,7 @@ from byolsp.errors import ConfigError, RepoNotInitialized
 from byolsp.ignore import IgnoreMode, ignore_file, write_ignore_block
 from byolsp.paths import global_config_dir, resolve_repo_root
 from byolsp.sgconfig import ensure_rule_dirs
-from byolsp.sync import summarize_changes, sync_repo
+from byolsp.sync import load_canonical_rules, summarize_changes, sync_repo
 
 GIT_HOOKS_NOTICE = (
     "Git hook shims are not implemented yet; rerun `byolsp init --git-hooks` "
@@ -82,7 +82,7 @@ def initialize_repo(
         repo_root, repo_registry_path(config_dir, global_config)
     ):
         messages.append("Registered repository for `byolsp sync --all`")
-    sync_result = sync_repo(repo_root, config_dir).result
+    _, sync_result = sync_repo(repo_root, load_canonical_rules(config_dir))
     if sync_result.changed:
         messages.append(f"Synced {summarize_changes(sync_result)}")
     # Seam for the doctor component (SPEC 15.1 step 8): run `doctor --quick` here.
