@@ -39,6 +39,8 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     for name, help_text in COMMANDS.items():
         command = subparsers.add_parser(name, help=help_text, description=help_text)
+        # Commands that have not yet grown a --repo flag still get args.repo.
+        command.set_defaults(repo=None)
         if name == "init":
             _add_init_arguments(command)
         if name == "sync":
@@ -110,7 +112,10 @@ SELF_SYNCING_COMMANDS = frozenset({"init", "sync"})
 
 def run(args: argparse.Namespace) -> int:
     if args.command not in SELF_SYNCING_COMMANDS:
-        _self_heal_preamble(args)
+        heal_message = _self_heal_preamble(args)
+        if heal_message is not None:
+            # stderr keeps stdout clean for JSON-emitting commands (SPEC 15.3/15.8).
+            print(heal_message, file=sys.stderr)
     if args.command == "init":
         # Deferred so startup (--help, future hot paths) never pays for ruamel.
         from byolsp.init import run_init
@@ -123,19 +128,16 @@ def run(args: argparse.Namespace) -> int:
     raise ByolspError(f"'{args.command}' is not implemented yet")
 
 
-def _self_heal_preamble(args: argparse.Namespace) -> None:
+def _self_heal_preamble(args: argparse.Namespace) -> str | None:
     """SPEC 15: every repo-operating command heals a stale repo before running.
 
-    Commands that have not yet grown a --repo flag heal the repo found from
-    the current directory; uninitialized repos are skipped silently.
+    Returns the one-line heal summary (None when nothing changed) so doctor
+    can report what was healed (SPEC 15.3). Uninitialized repos heal silently.
     """
     from byolsp.paths import global_config_dir, resolve_repo_root
     from byolsp.sync import heal_repo
 
-    repo_root = resolve_repo_root(explicit=getattr(args, "repo", None))
-    message = heal_repo(repo_root, global_config_dir())
-    if message is not None:
-        print(message)
+    return heal_repo(resolve_repo_root(explicit=args.repo), global_config_dir())
 
 
 def main(argv: Sequence[str] | None = None) -> int:

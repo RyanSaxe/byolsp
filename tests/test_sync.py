@@ -205,10 +205,10 @@ def test_any_command_self_heals_a_stale_repo(
     main(["list"])
 
     assert (mirror(repo) / "no-cast.yml").is_file()
-    assert "byolsp: synced 1 updated global rule\n" in capsys.readouterr().out
+    assert "byolsp: synced 1 updated global rule\n" in capsys.readouterr().err
 
     main(["list"])
-    assert "byolsp: synced" not in capsys.readouterr().out
+    assert "byolsp: synced" not in capsys.readouterr().err
 
 
 def test_sync_all_syncs_registered_repos_and_skips_missing_paths(
