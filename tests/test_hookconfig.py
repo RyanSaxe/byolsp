@@ -1,0 +1,166 @@
+"""The generalized per-harness hook-config engine (SPEC 28.3)."""
+
+import json
+from pathlib import Path
+
+import pytest
+
+from byolsp.errors import ConfigError
+from byolsp.harness import HARNESS_CHOICES, Harness
+from byolsp.hookconfig import (
+    BYOLSP_COMMAND_SIGNATURE,
+    HOOK_SPECS,
+    global_hook_dir,
+    hook_command,
+    hook_installed,
+    install_hook,
+    uninstall_hook,
+)
+
+
+@pytest.fixture
+def isolated_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """A home directory the global hook configs land under, never the real one."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: home)
+    return home
+
+
+def config_text(repo: Path, harness: Harness) -> str:
+    return (repo / HOOK_SPECS[harness].project_relpath).read_text()
+
+
+def commands_in(text: str) -> list[str]:
+    """Every command string anywhere in a harness config, across both shapes."""
+    found: list[str] = []
+
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == "command" and isinstance(value, str):
+                    found.append(value)
+                else:
+                    walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(json.loads(text))
+    return found
+
+
+@pytest.mark.parametrize("harness", HARNESS_CHOICES)
+def test_project_install_writes_a_guarded_command(
+    harness: Harness, tmp_path: Path
+) -> None:
+    install_hook(tmp_path, harness, "project")
+
+    [command] = commands_in(config_text(tmp_path, harness))
+    assert f"{BYOLSP_COMMAND_SIGNATURE} {harness}" in command
+    assert "command -v byolsp" in command
+    assert command.endswith("|| true")
+    assert hook_installed(tmp_path, harness, "project")
+
+
+def test_claude_code_global_command_is_unguarded_and_redirects(tmp_path: Path) -> None:
+    command = hook_command("claude-code", "global")
+
+    assert command == f"{BYOLSP_COMMAND_SIGNATURE} claude-code >&2"
+
+
+@pytest.mark.parametrize("harness", HARNESS_CHOICES)
+def test_install_is_idempotent(harness: Harness, tmp_path: Path) -> None:
+    install_hook(tmp_path, harness, "project")
+    snapshot = config_text(tmp_path, harness)
+
+    assert install_hook(tmp_path, harness, "project") == []
+    assert config_text(tmp_path, harness) == snapshot
+
+
+@pytest.mark.parametrize("harness", HARNESS_CHOICES)
+def test_uninstall_removes_only_the_byolsp_entry(
+    harness: Harness, tmp_path: Path
+) -> None:
+    spec = HOOK_SPECS[harness]
+    user_entry: dict[str, object] = {"command": "echo mine"}
+    if spec.matcher is not None:
+        user_entry = {"matcher": "Bash", "hooks": [{"type": "command", "command": "x"}]}
+    path = tmp_path / spec.project_relpath
+    path.parent.mkdir(parents=True, exist_ok=True)
+    config = _config_with_entry(spec.key_path, user_entry)
+    path.write_text(json.dumps(config))
+    install_hook(tmp_path, harness, "project")
+
+    assert uninstall_hook(tmp_path, harness, "project")
+
+    remaining = commands_in(config_text(tmp_path, harness))
+    assert all(BYOLSP_COMMAND_SIGNATURE not in command for command in remaining)
+    assert not hook_installed(tmp_path, harness, "project")
+
+
+@pytest.mark.parametrize("harness", HARNESS_CHOICES)
+def test_uninstall_is_idempotent_and_silent_when_absent(
+    harness: Harness, tmp_path: Path
+) -> None:
+    assert uninstall_hook(tmp_path, harness, "project") == []
+
+
+@pytest.mark.parametrize("harness", HARNESS_CHOICES)
+def test_global_scope_writes_under_the_isolated_home(
+    harness: Harness, isolated_home: Path, tmp_path: Path
+) -> None:
+    install_hook(tmp_path, harness, "global")
+
+    spec = HOOK_SPECS[harness]
+    global_path = global_hook_dir(harness, isolated_home) / spec.global_relpath
+    assert global_path.is_file()
+    [command] = commands_in(global_path.read_text())
+    # Global configs are personal: no teammate guard.
+    assert "command -v byolsp" not in command
+    assert hook_installed(tmp_path, harness, "global")
+
+
+def test_claude_local_scope_uses_settings_local(tmp_path: Path) -> None:
+    install_hook(tmp_path, "claude-code", "local")
+
+    local = tmp_path / ".claude" / "settings.local.json"
+    assert local.is_file()
+    assert BYOLSP_COMMAND_SIGNATURE in local.read_text()
+
+
+def test_install_preserves_unrelated_keys_and_user_entries(tmp_path: Path) -> None:
+    settings = tmp_path / ".claude" / "settings.json"
+    settings.parent.mkdir(parents=True)
+    user_group = {"matcher": "Bash", "hooks": [{"type": "command", "command": "true"}]}
+    settings.write_text(
+        json.dumps({"model": "opus", "hooks": {"PostToolUse": [user_group]}})
+    )
+
+    install_hook(tmp_path, "claude-code", "project")
+
+    data = json.loads(settings.read_text())
+    assert data["model"] == "opus"
+    assert user_group in data["hooks"]["PostToolUse"]
+
+
+def test_malformed_config_raises_a_clean_config_error(tmp_path: Path) -> None:
+    path = tmp_path / ".cursor" / "hooks.json"
+    path.parent.mkdir(parents=True)
+    path.write_text("{not json")
+
+    with pytest.raises(ConfigError, match="not valid JSON"):
+        install_hook(tmp_path, "cursor", "project")
+
+
+def _config_with_entry(
+    key_path: tuple[str, ...], entry: dict[str, object]
+) -> dict[str, object]:
+    node: dict[str, object] = {}
+    config = node
+    for key in key_path[:-1]:
+        child: dict[str, object] = {}
+        node[key] = child
+        node = child
+    node[key_path[-1]] = [entry]
+    return config
