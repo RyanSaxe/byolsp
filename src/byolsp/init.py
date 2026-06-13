@@ -37,7 +37,7 @@ from byolsp.ignore import (
     write_ignore_block,
     write_rule_visibility_file,
 )
-from byolsp.paths import global_config_dir, resolve_repo_root
+from byolsp.paths import display_path, global_config_dir, resolve_repo_root
 from byolsp.sgconfig import ensure_rule_dirs
 from byolsp.sync import load_canonical_rules, summarize_changes, sync_repo
 
@@ -80,8 +80,8 @@ def initialize_repo(
     if sgconfig_message is not None:
         messages.append(sgconfig_message)
     if write_ignore_block(repo_root, options.ignore_mode):
-        target = ignore_file(repo_root, options.ignore_mode).relative_to(repo_root)
-        messages.append(f"Wrote ignore block to {target.as_posix()}")
+        target = display_path(ignore_file(repo_root, options.ignore_mode), repo_root)
+        messages.append(f"Wrote ignore block to {target}")
     messages.extend(install_agents(repo_root, options.agents, options.hook_scope))
     if options.git_hooks:
         messages.extend(install_git_shims(repo_root))

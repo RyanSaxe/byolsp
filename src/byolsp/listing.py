@@ -10,7 +10,7 @@ from typing import Literal
 
 from byolsp.checks import EffectiveCheck, load_effective_checks
 from byolsp.config import load_repo_config
-from byolsp.paths import global_config_dir, resolve_repo_root
+from byolsp.paths import display_path, global_config_dir, resolve_repo_root
 from byolsp.rules import load_rules
 from byolsp.sync import load_canonical_rules, repo_sync_plan
 
@@ -59,7 +59,7 @@ def collect_rules(repo_root: Path, scope: ListScope) -> list[ListedRule]:
         ListedRule(
             scope=name,
             id=rule.id,
-            path=rule.path.relative_to(repo_root).as_posix(),
+            path=display_path(rule.path, repo_root),
         )
         for name in wanted
         for rule in load_rules(repo_root / directories[name])
