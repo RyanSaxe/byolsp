@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from conftest import make_repo
+from conftest import commands_in, make_repo
 
 from byolsp.agents import MANAGED_MARKER
 from byolsp.cli import main
@@ -25,25 +25,11 @@ def claude_command(repo: Path) -> str:
     text = (repo / SETTINGS_RELPATH).read_text()
     commands = [
         command
-        for command in _all_commands(json.loads(text))
+        for command in commands_in(json.loads(text))
         if BYOLSP_COMMAND_SIGNATURE in command
     ]
     [command] = commands
     return command
-
-
-def _all_commands(node: object) -> list[str]:
-    if isinstance(node, dict):
-        found: list[str] = []
-        for key, value in node.items():
-            if key == "command" and isinstance(value, str):
-                found.append(value)
-            else:
-                found.extend(_all_commands(value))
-        return found
-    if isinstance(node, list):
-        return [command for item in node for command in _all_commands(item)]
-    return []
 
 
 def test_init_installs_instruction_files_for_requested_agents(home: Path) -> None:

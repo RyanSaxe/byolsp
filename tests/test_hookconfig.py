@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+from conftest import commands_in
 
 from byolsp.errors import ConfigError
 from byolsp.harness import HARNESS_CHOICES, Harness
@@ -31,32 +32,13 @@ def config_text(repo: Path, harness: Harness) -> str:
     return (repo / HOOK_SPECS[harness].project_relpath).read_text()
 
 
-def commands_in(text: str) -> list[str]:
-    """Every command string anywhere in a harness config, across both shapes."""
-    found: list[str] = []
-
-    def walk(node: object) -> None:
-        if isinstance(node, dict):
-            for key, value in node.items():
-                if key == "command" and isinstance(value, str):
-                    found.append(value)
-                else:
-                    walk(value)
-        elif isinstance(node, list):
-            for item in node:
-                walk(item)
-
-    walk(json.loads(text))
-    return found
-
-
 @pytest.mark.parametrize("harness", HARNESS_CHOICES)
 def test_project_install_writes_a_guarded_command(
     harness: Harness, tmp_path: Path
 ) -> None:
     install_hook(tmp_path, harness, "project")
 
-    [command] = commands_in(config_text(tmp_path, harness))
+    [command] = commands_in(json.loads(config_text(tmp_path, harness)))
     assert f"{BYOLSP_COMMAND_SIGNATURE} {harness}" in command
     assert "command -v byolsp" in command
     assert command.endswith("|| true")
@@ -102,7 +84,7 @@ def test_uninstall_removes_only_the_byolsp_entry(
 
     assert uninstall_hook(tmp_path, harness, "project")
 
-    remaining = commands_in(config_text(tmp_path, harness))
+    remaining = commands_in(json.loads(config_text(tmp_path, harness)))
     assert all(BYOLSP_COMMAND_SIGNATURE not in command for command in remaining)
     assert not hook_installed(tmp_path, harness, "project")
 
@@ -123,7 +105,7 @@ def test_global_scope_writes_under_the_isolated_home(
     spec = HOOK_SPECS[harness]
     global_path = global_hook_dir(harness, isolated_home) / spec.global_relpath
     assert global_path.is_file()
-    [command] = commands_in(global_path.read_text())
+    [command] = commands_in(json.loads(global_path.read_text()))
     # Global configs are personal: no teammate guard.
     assert "command -v byolsp" not in command
     assert hook_installed(tmp_path, harness, "global")

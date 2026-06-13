@@ -35,6 +35,21 @@ def clean_git_env(monkeypatch: pytest.MonkeyPatch) -> None:
             monkeypatch.delenv(name)
 
 
+def commands_in(node: object) -> list[str]:
+    """Every `command` string anywhere in a parsed harness-config JSON tree."""
+    if isinstance(node, dict):
+        found: list[str] = []
+        for key, value in node.items():
+            if key == "command" and isinstance(value, str):
+                found.append(value)
+            else:
+                found.extend(commands_in(value))
+        return found
+    if isinstance(node, list):
+        return [command for item in node for command in commands_in(item)]
+    return []
+
+
 def git(repo: Path, *argv: str) -> str:
     """Run git in `repo` with an inline throwaway identity; returns stdout."""
     result = subprocess.run(
