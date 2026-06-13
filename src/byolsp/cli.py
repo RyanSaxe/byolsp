@@ -240,6 +240,14 @@ def _add_agent_check_arguments(command: argparse.ArgumentParser) -> None:
         help="Read the edited file from a Claude Code hook JSON payload on stdin",
     )
     command.add_argument(
+        "--scope",
+        choices=("edit", "diff", "file"),
+        help=(
+            "Keep only diagnostics on edited lines, uncommitted git diff"
+            " lines, or anywhere in the scanned files (default: per mode)"
+        ),
+    )
+    command.add_argument(
         "--format",
         choices=("text", "json"),
         default="text",

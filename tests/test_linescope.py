@@ -1,9 +1,22 @@
 """Line-range scoping: edit location, diff hunks, and overlap (SPEC 28.3)."""
 
+import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from byolsp.linescope import diff_ranges, edit_ranges, merge_ranges, overlaps
+
+
+@pytest.fixture(autouse=True)
+def clean_git_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GIT_* vars leak in when pytest runs inside a git hook (pre-commit) and
+    would redirect the git calls below at the byolsp repo itself."""
+    for name in list(os.environ):
+        if name.startswith("GIT_"):
+            monkeypatch.delenv(name)
+
 
 TEXT = "alpha\nbravo\ncharlie\ndelta\necho\n"
 

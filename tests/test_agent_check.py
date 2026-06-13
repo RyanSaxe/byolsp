@@ -2,7 +2,9 @@
 
 import io
 import json
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -10,6 +12,16 @@ import pytest
 from conftest import make_repo
 
 from byolsp.cli import main
+
+
+@pytest.fixture(autouse=True)
+def clean_git_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GIT_* vars leak in when pytest runs inside a git hook (pre-commit) and
+    would redirect the git calls below at the byolsp repo itself."""
+    for name in list(os.environ):
+        if name.startswith("GIT_"):
+            monkeypatch.delenv(name)
+
 
 CAST_PROMPT = (
     "Do not use typing.cast here. Fix the type by narrowing, changing the "
@@ -199,6 +211,77 @@ def test_stdin_hook_without_a_file_path_scans_nothing(
     assert check(check_repo, "--stdin-hook") == 0
 
     assert capsys.readouterr().out == ""
+
+
+def git(repo: Path, *argv: str) -> None:
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", *argv],
+        cwd=repo,
+        capture_output=True,
+        check=True,
+    )
+
+
+def commit_violation(repo: Path) -> Path:
+    git(repo, "init", "--quiet")
+    source = repo / "src.py"
+    source.write_text("a = cast(int, 1)\n")
+    git(repo, "add", "src.py")
+    git(repo, "commit", "--quiet", "-m", "add src")
+    return source
+
+
+def test_diff_scope_silences_committed_violations_file_scope_reports(
+    check_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = commit_violation(check_repo)
+
+    assert check(check_repo, "--files", str(source), "--scope", "diff") == 0
+    assert capsys.readouterr().out == ""
+
+    assert check(check_repo, "--files", str(source), "--scope", "file") == 2
+    assert "Rule: no-python-cast" in capsys.readouterr().out
+
+
+def test_diff_scope_keeps_uncommitted_lines_and_untracked_files(
+    check_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = commit_violation(check_repo)
+    source.write_text("a = cast(int, 1)\nb = cast(int, 2)\n")
+    untracked = check_repo / "new.py"
+    untracked.write_text("c = cast(int, 3)\n")
+
+    files = ("--files", str(source), str(untracked))
+    assert check(check_repo, *files, "--scope", "diff") == 2
+
+    out = capsys.readouterr().out
+    locations = re.findall(r"^\S+\.py:\d+:\d+$", out, flags=re.MULTILINE)
+    assert locations == ["new.py:1:5", "src.py:2:5"]
+
+
+def test_edit_scope_without_a_hook_payload_is_a_clean_error(
+    check_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = check_repo / "src.py"
+    source.write_text("a = cast(int, 1)\n")
+
+    assert check(check_repo, "--files", str(source), "--scope", "edit") == 1
+
+    captured = capsys.readouterr()
+    assert "--scope edit needs a hook payload" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_missing_files_are_dropped_silently_under_diff_scope(
+    check_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    missing = check_repo / "gone.py"
+
+    assert check(check_repo, "--files", str(missing), "--scope", "diff") == 0
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
 
 
 def test_scan_failure_is_a_clean_tool_error(

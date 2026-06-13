@@ -27,8 +27,8 @@ harness's own instruction location) and the loop works.
 ## agent-check
 
 ```bash
-byolsp agent-check [--repo PATH] [--files FILE ...] [--format text|json]
-                   [--max-results N]
+byolsp agent-check [--repo PATH] [--files FILE ...] [--scope edit|diff|file]
+                   [--format text|json] [--max-results N]
 ```
 
 Runs `ast-grep scan --json=compact --include-metadata --color never` on the
@@ -70,6 +70,14 @@ with:
 render cap. `--format json` prints all diagnostics as
 `{"issues": [{"file", "line", "column", "rule_id", "severity", "message",
 "code", "instruction"}, ...]}` with 1-based positions and repo-relative paths.
+
+`--scope` keeps only diagnostics whose lines overlap the chosen ranges
+(default: `file`). `diff` scopes to uncommitted `git diff HEAD` lines — an
+untracked file is all new lines, and without usable git history the whole
+file stays in scope. `edit` scopes to the lines a hook payload's edit
+touched, so it requires `--stdin-hook`, and falls back to `diff` then `file`
+when the edit contents cannot be located. Under `edit`/`diff` scope, files
+missing on disk are skipped silently.
 
 `--stdin-hook` (instead of `--files`) reads a Claude Code PostToolUse JSON
 payload on stdin and scans the `tool_input.file_path` it names. Payloads
