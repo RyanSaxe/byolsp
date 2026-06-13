@@ -265,7 +265,6 @@ metadata:
       signature, introducing a protocol, or restructuring the value flow. If
       the cast is genuinely necessary, leave a concise comment explaining the
       invariant that the type checker cannot see.
-    allow_with_comment: true
     tags:
       - python
       - typing
@@ -273,7 +272,9 @@ metadata:
 
 Required ast-grep fields: `id`, `language`, `rule`, `message`. Recommended: `severity`.
 
-Optional `metadata.byolsp` fields: `rationale`, `agent_prompt`, `allow_with_comment`, `docs_url`, `tags`. AI hooks use `agent_prompt`, falling back to `message` when absent.
+Optional `metadata.byolsp` fields: `rationale`, `agent_prompt`, `docs_url`, `tags`. AI hooks use `agent_prompt`, falling back to `message` when absent.
+
+Exception policy lives in the prompt, not in schema fields: a rule that tolerates exceptions says so in its `agent_prompt`, ending with the suppression idiom — `# ast-grep-ignore: <rule-id> -- <short reason>` on its own line above the violation (native to ast-grep scan and LSP; always include the rule id, keep the reason short). `byolsp add --allow-exceptions` appends this standard sentence for you (section 28.1).
 
 No separate compiled rule format.
 
@@ -436,7 +437,6 @@ metadata:
   byolsp:
     rationale: REPLACE_ME
     agent_prompt: REPLACE_ME
-    allow_with_comment: false
     tags: []
 ```
 
@@ -591,8 +591,9 @@ byolsp agent-check --files <changed files>
 
 If BYOLSP reports a diagnostic, fix it before continuing.
 
-If a rule says an exception is allowed with a comment, only keep the violating
-code when the code is genuinely necessary and add a concise comment explaining why.
+If a rule's instruction permits exceptions, only keep the violating code when
+genuinely necessary, and suppress it with `# ast-grep-ignore: <rule-id> -- <short
+reason>` on its own line above the violation.
 ````
 
 Agent-specific files may add harness-specific wiring but keep the same core instruction.
@@ -730,7 +731,6 @@ metadata:
       boundary, stable public API, semantic name, or compatibility layer. Inline
       the call or use the real function directly. If this wrapper is genuinely
       necessary, leave a concise comment explaining the boundary it protects.
-    allow_with_comment: true
     tags:
       - python
       - abstraction
@@ -808,9 +808,78 @@ The skill must include a worked example (feedback → drafted rule → confirmat
 
 ### 27.4 Codex and Copilot Notes
 
-Codex and Copilot still expose no post-edit hook API; their adapters remain instruction files — but both auto-discover the skill from section 27.1's locations, so they get the capture loop natively. Their instruction files should mention the skill by name.
+(Superseded by section 28.3 — both harnesses shipped real lifecycle hooks. Their instruction files still mention the skill by name.)
 
-## 28. Core Principle
+## 28. v1 Polish Contract
+
+The final feature work before v1. Verified against official harness docs, June 2026.
+
+### 28.1 Exceptions
+
+`allow_with_comment` is removed from the metadata schema, the add template, the skill, and all instruction text. Exception policy lives in `agent_prompt` prose (section 11.1). `byolsp add --allow-exceptions` appends one standard sentence to the generated rule's `agent_prompt`:
+
+```text
+If this is genuinely necessary, suppress with
+`# ast-grep-ignore: <rule-id> -- <short reason>` on its own line above,
+and keep the reason short.
+```
+
+The capture skill folds "are exceptions allowed?" into its single confirmation question and includes the sentence when yes.
+
+### 28.2 remove
+
+```bash
+byolsp remove RULE_ID [--scope project|local|global|auto] [--repo PATH]
+```
+
+Scope resolution identical to `edit` (auto: project → local → canonical global; generated copies map back to canonical). Deletes the rule file, then sync (global scope fans out to registered repos) and `doctor --quick`. Removing a project rule that shadowed a global rule lets the global copy return on that sync.
+
+### 28.3 Universal Hook Adapters and Diagnostic Scope
+
+All five harnesses expose real post-edit hooks with feedback channels, at both repo and global registration levels:
+
+| Harness | Hook | Repo config | Global config | Edit contents in payload | Feedback |
+| --- | --- | --- | --- | --- | --- |
+| Claude Code | `PostToolUse` | `.claude/settings.json` (+ `settings.local.json`) | `~/.claude/settings.json` | `old_string`/`new_string`/`content` | exit 2 + stderr |
+| Codex | `PostToolUse` (matcher `Edit\|Write`) | `.codex/hooks.json` (trust-gated via `/hooks`) | `~/.codex/hooks.json` | patch text in `tool_input.command` | JSON `hookSpecificOutput.additionalContext` |
+| Copilot CLI | `postToolUse` | `.github/hooks/*.json` | `~/.copilot/hooks/` | `toolArgs` (shape undocumented) | JSON `additionalContext` (10KB cap) |
+| OpenCode | `tool.execute.after` plugin | `.opencode/plugin/` | `~/.config/opencode/plugin/` | `oldString`/`newString` | mutate tool output |
+| Cursor | `postToolUse` | `.cursor/hooks.json` | `~/.cursor/hooks.json` | `edits[]` old/new strings | JSON `additional_context` |
+
+Contract:
+
+1. **`--scope edit|diff|file` on agent-check.** `edit` = only lines of the edit described by the hook payload; `diff` = lines in uncommitted `git diff HEAD -U0` hunks (untracked file = all lines); `file` = everything. Fallback chain edit → diff → file when contents can't be located. Defaults: hook mode → `edit`, `--files` → `file`; explicit flag wins. Multi-line diagnostics filter by range overlap, not start line.
+2. **`--stdin-hook HARNESS`** (claude-code|codex|copilot|cursor): per-harness payload parsers normalize to (file, edit contents) — codex by parsing the apply_patch text, copilot fail-safe (known fields else diff scope) — and per-harness response emitters speak each feedback format. All fail-open: byolsp errors never block the agent. Hook mode exits 0 silently in repos without `.byolsp/`.
+3. **`hook install --agent X --hook-scope project|global`** (plus `local` for claude-code). Project-scope command strings carry a `command -v byolsp` guard so teammates without byolsp are unaffected. Global configs are ownership-managed with the same converge-only-ours rules as the existing claude-code settings logic. Init asks project vs global.
+4. **`cursor` joins the agent choices** (hook + instruction file + skill discovery note). The OpenCode plugin and all instruction-driven usage (skill, instruction files) say `--scope diff`.
+5. **README carries the harness support matrix** (skills, instructions, hooks, payload precision, registration levels).
+
+### 28.4 Extra Checks
+
+`checks:` is valid in both `.byolsp/config.yml` (committed, team) and the global config (personal, every repo):
+
+```yaml
+checks:
+  - name: ruff
+    extensions: [py]
+    run: uv run ruff check --output-format concise
+```
+
+`run` is shlex-split (argv, never a shell); in-scope files are appended as trailing arguments; `extensions` filters which files trigger the check. Merged by `name`, repo wins over global; `.byolsp/local.yml` `checks.excluded` disables by name per repo (the `excluded_rule_ids` analogue). agent-check runs ast-grep first, then each matching check on the in-scope files; nonzero check output is appended raw under a `### <name>` header and yields exit 2. A missing check command prints one warning line and never crashes the hook. `list`/`doctor` surface effective checks with origin and exclusions. Trust model: committed checks run on contributors' machines — same model as pre-commit; documented.
+
+### 28.5 Global Init Defaults
+
+The global config gains an `init:` section (`agents`, `ignore_mode`, `git_hooks`, `hook_scope`) used as the defaults for init's interactive prompts and as the answers under `--non-interactive`.
+
+### 28.6 Resolver Validation
+
+An ast-grep candidate (`$BYOLSP_AST_GREP`, `ast-grep`, `sg`) is accepted only if a `--version` probe reports an ast-grep version; otherwise resolution continues down the chain (Ubuntu's `/usr/bin/sg` is the unix setgroups tool — discovered when CI ran without ast-grep installed). Probe once per resolution.
+
+### 28.7 CI Matrix
+
+CI runs the four gates on `ubuntu-latest`, `macos-latest`, and `windows-latest`, installing ast-grep via `npm install -g @ast-grep/cli`. Docs gain a CI recipe: fresh clones scan project rules with zero byolsp; gate with `ast-grep scan --error` (warning severities do not fail exit codes otherwise).
+
+## 29. Core Principle
 
 BYOLSP makes custom diagnostics feel native everywhere by arranging plain files so ast-grep already knows what to do.
 
