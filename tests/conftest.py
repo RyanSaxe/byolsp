@@ -59,6 +59,15 @@ def make_editor(directory: Path, content: str) -> str:
     return shlex.join([sys.executable, "-c", copy_into_edited_file, str(source)])
 
 
+def substituting_editor(old: str, new: str) -> str:
+    """An $EDITOR whose command replaces `old` with `new` in the edited file."""
+    substitute = (
+        "import pathlib, sys; path = pathlib.Path(sys.argv[1]); "
+        f"path.write_text(path.read_text().replace({old!r}, {new!r}))"
+    )
+    return shlex.join([sys.executable, "-c", substitute])
+
+
 def noop_editor() -> str:
     """An $EDITOR that exits 0 without touching the file."""
     return shlex.join([sys.executable, "-c", "pass"])

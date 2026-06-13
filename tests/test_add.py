@@ -1,5 +1,3 @@
-import shlex
-import sys
 from pathlib import Path
 
 import pytest
@@ -10,6 +8,7 @@ from conftest import (
     make_repo,
     mirror,
     noop_editor,
+    substituting_editor,
     write_global_rule,
     write_rule,
 )
@@ -231,13 +230,7 @@ def test_allow_exceptions_with_edit_keeps_the_prefilled_sentence(
     home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = make_repo(home)
-    fill_in_placeholders = (
-        "import pathlib, sys; p = pathlib.Path(sys.argv[1]); "
-        "p.write_text(p.read_text().replace('REPLACE_ME', 'no-cast'))"
-    )
-    monkeypatch.setenv(
-        "EDITOR", shlex.join([sys.executable, "-c", fill_in_placeholders])
-    )
+    monkeypatch.setenv("EDITOR", substituting_editor("REPLACE_ME", "no-cast"))
 
     assert add(repo, "--scope", "local", "--edit", "--allow-exceptions") == 0
 
