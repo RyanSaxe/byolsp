@@ -19,6 +19,7 @@ from byolsp.fsio import (
 )
 from byolsp.opencode import OPENCODE_MARKER, OPENCODE_PLUGIN, OPENCODE_PLUGIN_RELPATH
 from byolsp.paths import resolve_repo_root
+from byolsp.rules import SUPPRESSION_COMMENT
 from byolsp.skill import SKILL_MARKDOWN, SKILL_RELPATHS
 
 JsonValue: TypeAlias = (
@@ -38,7 +39,7 @@ CLAUDE_HOOK_MATCHER = "Write|Edit|MultiEdit|NotebookEdit"
 # the model, hence the >&2 (agent-check exits 2 exactly with diagnostics).
 CLAUDE_HOOK_COMMAND = "byolsp agent-check --stdin-hook >&2"
 
-CORE_INSTRUCTION = """\
+CORE_INSTRUCTION = f"""\
 This repository uses BYOLSP to expose custom ast-grep diagnostics.
 
 After writing or editing code, run:
@@ -50,8 +51,8 @@ byolsp agent-check --files <changed files>
 If BYOLSP reports a diagnostic, fix it before continuing.
 
 If a rule's instruction permits exceptions, only keep the violating code when
-genuinely necessary, and suppress it with `# ast-grep-ignore: <rule-id> -- <short
-reason>` on its own line above the violation.
+genuinely necessary, and suppress it with
+`{SUPPRESSION_COMMENT}` on its own line above the violation.
 """
 
 GENERIC_AGENT_INSTRUCTIONS = (
