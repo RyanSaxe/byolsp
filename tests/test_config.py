@@ -3,7 +3,9 @@ from pathlib import Path
 import pytest
 
 from byolsp.config import (
+    CheckDef,
     GlobalConfig,
+    InitDefaults,
     LocalConfig,
     RepoConfig,
     global_rules_dir,
@@ -52,8 +54,36 @@ def test_repo_config_rejects_wrongly_typed_values(tmp_path: Path) -> None:
         load_repo_config(tmp_path)
 
 
+def test_repo_config_round_trips_checks(tmp_path: Path) -> None:
+    config = RepoConfig(
+        checks=[CheckDef("ruff", ["py"], "uv run ruff check --output-format concise")]
+    )
+
+    save_repo_config(tmp_path, config)
+
+    assert load_repo_config(tmp_path).checks == config.checks
+
+
+def test_repo_config_rejects_a_check_missing_name_or_run(tmp_path: Path) -> None:
+    (tmp_path / ".byolsp").mkdir()
+    (tmp_path / ".byolsp" / "config.yml").write_text(
+        "version: 1\nchecks:\n  - extensions: [py]\n"
+    )
+
+    with pytest.raises(ConfigError, match="name"):
+        load_repo_config(tmp_path)
+
+
 def test_local_config_defaults_when_file_absent(tmp_path: Path) -> None:
     assert load_local_config(tmp_path) == LocalConfig()
+
+
+def test_local_config_round_trips_excluded_checks(tmp_path: Path) -> None:
+    config = LocalConfig(excluded_checks=["ruff"])
+
+    save_local_config(tmp_path, config)
+
+    assert load_local_config(tmp_path).excluded_checks == ["ruff"]
 
 
 def test_local_config_round_trips(tmp_path: Path) -> None:
@@ -93,6 +123,28 @@ def test_global_config_round_trips(tmp_path: Path) -> None:
     save_global_config(tmp_path, config)
 
     assert load_global_config(tmp_path) == config
+
+
+def test_global_config_round_trips_checks_and_init_defaults(tmp_path: Path) -> None:
+    config = GlobalConfig(
+        checks=[CheckDef("mypy", ["py"], "mypy")],
+        init=InitDefaults(
+            agents=["codex"],
+            ignore_mode="local",
+            git_hooks=True,
+            hook_scope="global",
+        ),
+    )
+
+    save_global_config(tmp_path, config)
+
+    assert load_global_config(tmp_path) == config
+
+
+def test_global_init_defaults_absent_when_unset(tmp_path: Path) -> None:
+    (tmp_path / "config.yml").write_text("version: 1\n")
+
+    assert load_global_config(tmp_path).init == InitDefaults()
 
 
 def test_global_config_partial_file_fills_defaults(tmp_path: Path) -> None:

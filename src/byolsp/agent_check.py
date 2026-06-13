@@ -10,7 +10,13 @@ from pathlib import Path
 from typing import Literal
 
 from byolsp.astgrep import ScanMatch, resolve_ast_grep, scan_files
-from byolsp.config import load_global_config, repo_config_path
+from byolsp.checks import CheckOutcome, EffectiveCheck, effective_checks, run_checks
+from byolsp.config import (
+    load_global_config,
+    load_local_config,
+    load_repo_config,
+    repo_config_path,
+)
 from byolsp.errors import ByolspError
 from byolsp.harness import EditPayload, Harness, emit, parse_payload
 from byolsp.linescope import Range, diff_ranges, edit_ranges, overlaps
@@ -49,14 +55,20 @@ def _run_files(
     args: argparse.Namespace, repo_root: Path, files: list[Path], scope: Scope
 ) -> int:
     """The `--files` path: print diagnostics in the requested text/json format."""
-    diagnostics = _diagnostics(args, repo_root, files, scope, payload=None)
+    scoped = _scoped_files(files, scope)
+    diagnostics = _diagnostics(args, repo_root, scoped, scope, payload=None)
+    outcome = run_checks(_effective_checks(repo_root), repo_root, scoped)
+    for warning in outcome.warnings:
+        print(warning, file=sys.stderr)
     if args.format == "json":
-        result = {"issues": [asdict(diagnostic) for diagnostic in diagnostics]}
-        print(json.dumps(result, indent=2))
+        print(json.dumps(_json_payload(diagnostics, outcome), indent=2))
     else:
         for line in render_diagnostics(diagnostics, _render_limit(args)):
             print(line)
-    return DIAGNOSTICS_EXIT_CODE if diagnostics else 0
+        for section in outcome.failures:
+            print(section)
+    has_findings = bool(diagnostics) or bool(outcome.failures)
+    return DIAGNOSTICS_EXIT_CODE if has_findings else 0
 
 
 def _run_hook(args: argparse.Namespace, repo_root: Path, harness: Harness) -> int:
@@ -86,27 +98,70 @@ def _hook_diagnostics(
     if not payload.files:
         return 0
     scope = _resolve_scope(args, harness)
-    diagnostics = _diagnostics(args, repo_root, payload.files, scope, payload)
-    rendered = "\n".join(render_diagnostics(diagnostics, _render_limit(args)))
+    scoped = _scoped_files(payload.files, scope)
+    diagnostics = _diagnostics(args, repo_root, scoped, scope, payload)
+    outcome = run_checks(_effective_checks(repo_root), repo_root, scoped)
+    for warning in outcome.warnings:
+        print(warning, file=sys.stderr)
+    rendered = _render_feedback(diagnostics, outcome, _render_limit(args))
     stdout, exit_code = emit(harness, rendered)
     if stdout:
         print(stdout)
     return exit_code
 
 
+def _scoped_files(raw_files: list[Path], scope: Scope) -> list[Path]:
+    """Resolve targets, dropping deleted ones under edit/diff scope.
+
+    An edit/diff-scoped target deleted since the edit has no lines left to
+    scope; under file scope an empty `--files` means the whole repository, so
+    the empty list is preserved.
+    """
+    files = [file.resolve() for file in raw_files]
+    if scope == "file" or not files:
+        return files
+    return [file for file in files if file.is_file()]
+
+
+def _effective_checks(repo_root: Path) -> list[EffectiveCheck]:
+    if not repo_config_path(repo_root).is_file():
+        return []
+    config_dir = global_config_dir()
+    return effective_checks(
+        load_repo_config(repo_root),
+        load_global_config(config_dir),
+        load_local_config(repo_root),
+    )
+
+
+def _json_payload(
+    diagnostics: list[Diagnostic], outcome: CheckOutcome
+) -> dict[str, list[dict[str, object]] | list[str]]:
+    payload: dict[str, list[dict[str, object]] | list[str]] = {
+        "issues": [asdict(diagnostic) for diagnostic in diagnostics]
+    }
+    if outcome.failures:
+        payload["checks"] = outcome.failures
+    return payload
+
+
+def _render_feedback(
+    diagnostics: list[Diagnostic], outcome: CheckOutcome, limit: int
+) -> str:
+    """Combine ast-grep diagnostics and failing-check sections for the emitter."""
+    sections = render_diagnostics(diagnostics, limit) + outcome.failures
+    return "\n".join(sections)
+
+
 def _diagnostics(
     args: argparse.Namespace,
     repo_root: Path,
-    raw_files: list[Path],
+    files: list[Path],
     scope: Scope,
     payload: EditPayload | None,
 ) -> list[Diagnostic]:
-    files = [file.resolve() for file in raw_files]
-    if scope != "file" and files:
-        # An edit/diff-scoped target deleted since the edit has no lines left.
-        files = [file for file in files if file.is_file()]
-        if not files:
-            return []
+    if scope != "file" and not files:
+        return []
     config_dir = global_config_dir()
     executable = resolve_ast_grep(load_global_config(config_dir).ast_grep_command)
     result = scan_files(executable, repo_root, files, max_results=args.max_results)

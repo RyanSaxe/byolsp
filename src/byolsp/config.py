@@ -23,6 +23,19 @@ class RepoPaths:
     personal_global_rules: str = ".byolsp/rules/personal/global"
 
 
+@dataclass(frozen=True)
+class CheckDef:
+    """An extra command-line check run after ast-grep (SPEC 28.4).
+
+    `run` is shlex-split into argv; in-scope files are appended as trailing
+    arguments. `extensions` (no dots) filters which files trigger the check.
+    """
+
+    name: str
+    extensions: list[str]
+    run: str
+
+
 @dataclass
 class RepoConfig:
     """Tracked repository config: .byolsp/config.yml."""
@@ -30,6 +43,7 @@ class RepoConfig:
     project_name: str | None = None
     paths: RepoPaths = field(default_factory=RepoPaths)
     agents: list[str] = field(default_factory=list)
+    checks: list[CheckDef] = field(default_factory=list)
 
 
 @dataclass
@@ -37,6 +51,21 @@ class LocalConfig:
     """Untracked per-user repository config: .byolsp/local.yml."""
 
     excluded_rule_ids: list[str] = field(default_factory=list)
+    excluded_checks: list[str] = field(default_factory=list)
+
+
+@dataclass
+class InitDefaults:
+    """Global defaults for init's prompts and `--non-interactive` answers.
+
+    `None` means "no global default; fall back to the built-in default"; an
+    explicit init flag always wins over both (SPEC 28.5).
+    """
+
+    agents: list[str] | None = None
+    ignore_mode: str | None = None
+    git_hooks: bool | None = None
+    hook_scope: str | None = None
 
 
 @dataclass
@@ -49,6 +78,8 @@ class GlobalConfig:
     rules_path: str = "rules"
     repos_path: str = "repos.yml"
     ast_grep_command: str = "auto"
+    checks: list[CheckDef] = field(default_factory=list)
+    init: InitDefaults = field(default_factory=InitDefaults)
 
 
 def rule_dir_relpaths(paths: RepoPaths) -> list[str]:
@@ -105,6 +136,7 @@ def load_repo_config(repo_root: Path) -> RepoConfig:
             ),
         ),
         agents=_string_list(ai, "agents", path),
+        checks=_check_defs(data, path),
     )
 
 
@@ -124,6 +156,7 @@ def save_repo_config(repo_root: Path, config: RepoConfig) -> None:
         },
     )
     _update_section(data, "ai", {"agents": list(config.agents)})
+    _write_checks(data, config.checks)
     write_yaml_atomic(path, data)
 
 
@@ -135,8 +168,10 @@ def load_local_config(repo_root: Path) -> LocalConfig:
     data = load_yaml_mapping(path)
     _check_version(data, path)
     section = _section(data, "global", path)
+    checks = _section(data, "checks", path)
     return LocalConfig(
-        excluded_rule_ids=_string_list(section, "excluded_rule_ids", path)
+        excluded_rule_ids=_string_list(section, "excluded_rule_ids", path),
+        excluded_checks=_string_list(checks, "excluded", path),
     )
 
 
@@ -147,6 +182,7 @@ def save_local_config(repo_root: Path, config: LocalConfig) -> None:
     _update_section(
         data, "global", {"excluded_rule_ids": list(config.excluded_rule_ids)}
     )
+    _update_section(data, "checks", {"excluded": list(config.excluded_checks)})
     write_yaml_atomic(path, data)
 
 
@@ -164,6 +200,8 @@ def load_global_config(config_dir: Path) -> GlobalConfig:
         rules_path=_string(paths, "rules", defaults.rules_path, path),
         repos_path=_string(paths, "repos", defaults.repos_path, path),
         ast_grep_command=_string(ast_grep, "command", defaults.ast_grep_command, path),
+        checks=_check_defs(data, path),
+        init=_init_defaults(_section(data, "init", path), path),
     )
 
 
@@ -175,6 +213,8 @@ def save_global_config(config_dir: Path, config: GlobalConfig) -> None:
         data, "paths", {"rules": config.rules_path, "repos": config.repos_path}
     )
     _update_section(data, "ast_grep", {"command": config.ast_grep_command})
+    _write_checks(data, config.checks)
+    _write_init_defaults(data, config.init)
     write_yaml_atomic(path, data)
 
 
@@ -210,7 +250,7 @@ def _load_or_new(path: Path) -> CommentedMap:
 
 
 def _update_section(
-    data: CommentedMap, key: str, values: dict[str, str | None | list[str]]
+    data: CommentedMap, key: str, values: dict[str, str | None | bool | list[str]]
 ) -> None:
     """Set managed keys in place so user comments and unknown keys survive."""
     section = data.get(key)
@@ -248,6 +288,70 @@ def _optional_string(section: CommentedMap, key: str, path: Path) -> str | None:
         return None
     if not isinstance(value, str):
         raise ConfigError(f"{path}: expected '{key}' to be a string or null")
+    return value
+
+
+def _check_defs(data: CommentedMap, path: Path) -> list[CheckDef]:
+    """Parse the `checks:` list shared by repo and global config (SPEC 28.4)."""
+    value = data.get("checks")
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ConfigError(f"{path}: expected 'checks' to be a list of mappings")
+    return [_check_def(entry, path) for entry in value]
+
+
+def _check_def(entry: object, path: Path) -> CheckDef:
+    if not isinstance(entry, CommentedMap):
+        raise ConfigError(f"{path}: expected each check to be a mapping")
+    name = _string(entry, "name", "", path)
+    run = _string(entry, "run", "", path)
+    if not name or not run:
+        raise ConfigError(f"{path}: each check needs a non-empty 'name' and 'run'")
+    return CheckDef(
+        name=name,
+        extensions=_string_list(entry, "extensions", path),
+        run=run,
+    )
+
+
+def _write_checks(data: CommentedMap, checks: list[CheckDef]) -> None:
+    data["checks"] = [
+        {"name": check.name, "extensions": list(check.extensions), "run": check.run}
+        for check in checks
+    ]
+
+
+def _init_defaults(section: CommentedMap, path: Path) -> InitDefaults:
+    agents = section.get("agents")
+    return InitDefaults(
+        agents=_string_list(section, "agents", path) if agents is not None else None,
+        ignore_mode=_optional_string(section, "ignore_mode", path),
+        git_hooks=_optional_bool(section, "git_hooks", path),
+        hook_scope=_optional_string(section, "hook_scope", path),
+    )
+
+
+def _write_init_defaults(data: CommentedMap, init: InitDefaults) -> None:
+    values: dict[str, str | None | bool | list[str]] = {}
+    if init.agents is not None:
+        values["agents"] = list(init.agents)
+    if init.ignore_mode is not None:
+        values["ignore_mode"] = init.ignore_mode
+    if init.git_hooks is not None:
+        values["git_hooks"] = init.git_hooks
+    if init.hook_scope is not None:
+        values["hook_scope"] = init.hook_scope
+    if values:
+        _update_section(data, "init", values)
+
+
+def _optional_bool(section: CommentedMap, key: str, path: Path) -> bool | None:
+    value = section.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise ConfigError(f"{path}: expected '{key}' to be a boolean")
     return value
 
 

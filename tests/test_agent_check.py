@@ -3,6 +3,7 @@
 import io
 import json
 import re
+import shlex
 import sys
 from pathlib import Path
 
@@ -10,6 +11,7 @@ import pytest
 from conftest import commit_file, git, make_repo
 
 from byolsp.cli import main
+from byolsp.config import CheckDef, load_repo_config, save_repo_config
 
 CAST_PROMPT = (
     "Do not use typing.cast here. Fix the type by narrowing, changing the "
@@ -56,6 +58,19 @@ def check_repo(home: Path, capsys: pytest.CaptureFixture[str]) -> Path:
 
 def check(repo: Path, *extra: str) -> int:
     return main(["agent-check", "--repo", str(repo), *extra])
+
+
+def add_repo_check(repo: Path, name: str, extensions: list[str], run: str) -> None:
+    config = load_repo_config(repo)
+    config.checks.append(CheckDef(name, extensions, run))
+    save_repo_config(repo, config)
+
+
+def failing_check_command(repo: Path, message: str) -> str:
+    """A check command that prints `message` and exits nonzero."""
+    script = repo / "fail_check.py"
+    script.write_text(f"import sys\nprint({message!r})\nsys.exit(1)\n")
+    return shlex.join([sys.executable, str(script)])
 
 
 def test_clean_files_exit_zero_with_no_output(
@@ -283,6 +298,73 @@ def test_hook_mode_is_silent_in_an_uninitialized_repo(
     assert check(bare, "--stdin-hook", "claude-code") == 0
 
     assert capsys.readouterr().out == ""
+
+
+def test_failing_check_appends_a_named_section_and_exits_two(
+    check_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    add_repo_check(
+        check_repo, "lint", ["py"], failing_check_command(check_repo, "bad style")
+    )
+    source = check_repo / "src.py"
+    source.write_text("x = 1\n")  # clean for ast-grep, so only the check fails
+
+    assert check(check_repo, "--files", str(source)) == 2
+
+    out = capsys.readouterr().out
+    assert "### lint" in out
+    assert "bad style" in out
+
+
+def test_failing_check_rides_the_harness_emitter_channel(
+    check_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    add_repo_check(
+        check_repo, "lint", ["py"], failing_check_command(check_repo, "bad style")
+    )
+    source = check_repo / "src.py"
+    source.write_text("x = 1\n")  # clean for ast-grep, so only the check fails
+    patch = f"*** Begin Patch\n*** Update File: {source}\n@@\n+x = 1\n*** End Patch"
+    stdin(monkeypatch, {"tool_input": {"command": patch}})
+
+    assert check(check_repo, "--stdin-hook", "codex") == 0
+
+    context = json.loads(capsys.readouterr().out)["hookSpecificOutput"][
+        "additionalContext"
+    ]
+    assert "### lint" in context
+    assert "bad style" in context
+
+
+def test_check_does_not_run_for_files_outside_its_extensions(
+    check_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    add_repo_check(
+        check_repo, "js-lint", ["js"], failing_check_command(check_repo, "js problem")
+    )
+    source = check_repo / "src.py"
+    source.write_text("x = 1\n")
+
+    assert check(check_repo, "--files", str(source)) == 0
+
+    assert capsys.readouterr().out == ""
+
+
+def test_missing_check_command_warns_and_keeps_diagnostics(
+    check_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    add_repo_check(check_repo, "ghost", ["py"], "byolsp-no-such-command --x")
+    source = check_repo / "src.py"
+    source.write_text('x = cast(int, "1")\n')
+
+    assert check(check_repo, "--files", str(source)) == 2
+
+    captured = capsys.readouterr()
+    assert "Rule: no-python-cast" in captured.out
+    assert "ghost" in captured.err
+    assert "### ghost" not in captured.out
 
 
 def commit_violation(repo: Path) -> Path:
