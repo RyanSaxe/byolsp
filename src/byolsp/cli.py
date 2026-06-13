@@ -12,7 +12,7 @@ from typing import get_args
 from byolsp.agents import AGENT_CHOICES
 from byolsp.errors import ByolspError
 from byolsp.harness import HARNESS_CHOICES
-from byolsp.hookconfig import HookScope
+from byolsp.hookconfig import HOOK_SCOPES, HookScope
 from byolsp.ignore import IgnoreMode
 
 COMMANDS = {
@@ -113,6 +113,11 @@ def _add_init_arguments(command: argparse.ArgumentParser) -> None:
         action=argparse.BooleanOptionalAction,
         default=None,
         help="Install post-merge/post-checkout shims that run `byolsp sync`",
+    )
+    command.add_argument(
+        "--hook-scope",
+        choices=HOOK_SCOPES,
+        help="Where to register agent hooks: project (committed) or global (~/)",
     )
     command.add_argument(
         "--non-interactive",

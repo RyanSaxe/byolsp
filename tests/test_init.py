@@ -190,12 +190,28 @@ def test_interactive_prompts_drive_agents_ignore_mode_and_hooks(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     git(repo, "init", "--quiet")
-    # Answers: agents -> claude-code, ignore mode -> local, git hooks -> yes.
-    monkeypatch.setattr(sys, "stdin", io.StringIO("2\n2\n2\n"))
+    # Answers: agents -> claude-code, ignore -> local, git hooks -> yes,
+    # hook scope -> project (claude-code is hook-capable, so it is asked).
+    monkeypatch.setattr(sys, "stdin", io.StringIO("2\n2\n2\n1\n"))
 
     assert main(["init", "--repo", str(repo)]) == 0
 
     assert load_repo_config(repo).agents == ["claude-code", "skill"]
     assert (repo / ".git" / "info" / "exclude").is_file()
-    assert "Installed .git/hooks/post-merge" in capsys.readouterr().out
+    assert (repo / ".claude" / "settings.json").is_file()
+    out = capsys.readouterr().out
+    assert "Installed .git/hooks/post-merge" in out
     assert (repo / ".git" / "hooks" / "post-checkout").is_file()
+
+
+def test_init_hook_scope_global_writes_configs_under_home(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_home = repo.parent / "fake-home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+
+    assert init(repo, "--agents", "cursor", "--hook-scope", "global") == 0
+
+    assert (fake_home / ".cursor" / "hooks.json").is_file()
+    assert not (repo / ".cursor" / "hooks.json").exists()

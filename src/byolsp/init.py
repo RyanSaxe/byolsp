@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from byolsp.agents import AGENT_CHOICES, install_agents
+from byolsp.agents import AGENT_CHOICES, HOOK_HARNESSES, install_agents
 from byolsp.config import (
     GlobalConfig,
     LocalConfig,
@@ -29,6 +29,7 @@ from byolsp.config import (
 from byolsp.doctor import quick_doctor_problems
 from byolsp.errors import ConfigError, RepoNotInitialized
 from byolsp.githooks import install_git_shims
+from byolsp.hookconfig import HOOK_SCOPES, HookScope
 from byolsp.ignore import (
     IgnoreMode,
     ignore_file,
@@ -47,6 +48,7 @@ class InitOptions:
     agents: list[str]
     ignore_mode: IgnoreMode
     git_hooks: bool
+    hook_scope: HookScope
     register: bool
     replace_sgconfig: bool
 
@@ -77,7 +79,7 @@ def initialize_repo(
     if write_ignore_block(repo_root, options.ignore_mode):
         target = ignore_file(repo_root, options.ignore_mode).relative_to(repo_root)
         messages.append(f"Wrote ignore block to {target.as_posix()}")
-    messages.extend(install_agents(repo_root, options.agents))
+    messages.extend(install_agents(repo_root, options.agents, options.hook_scope))
     if options.git_hooks:
         messages.extend(install_git_shims(repo_root))
     if options.register and register_repo(
@@ -148,6 +150,7 @@ def _options_from_args(args: argparse.Namespace) -> InitOptions:
         git_hooks: bool = args.git_hooks
     else:
         git_hooks = _prompt_git_hooks() if interactive else False
+    hook_scope = _resolve_hook_scope(args, agents, interactive)
     # The harness-neutral rule-capture skill installs by default (SPEC 27.2).
     if "skill" not in agents:
         agents.append("skill")
@@ -155,9 +158,29 @@ def _options_from_args(args: argparse.Namespace) -> InitOptions:
         agents=agents,
         ignore_mode=ignore_mode,
         git_hooks=git_hooks,
+        hook_scope=hook_scope,
         register=not args.no_register,
         replace_sgconfig=args.replace_sgconfig,
     )
+
+
+def _resolve_hook_scope(
+    args: argparse.Namespace, agents: list[str], interactive: bool
+) -> HookScope:
+    """Ask hook scope once for all selected hook-capable agents (SPEC 28.3)."""
+    if args.hook_scope is not None:
+        return args.hook_scope
+    if interactive and any(agent in HOOK_HARNESSES for agent in agents):
+        return _prompt_hook_scope()
+    return "project"
+
+
+def _prompt_hook_scope() -> HookScope:
+    choice = _prompt_choice(
+        "Where should byolsp register agent hooks?",
+        ("project (committed, shared with the team)", "global (~/, personal)"),
+    )
+    return HOOK_SCOPES[choice]
 
 
 def _parse_agents(raw: str) -> list[str]:
