@@ -1,4 +1,4 @@
-"""`byolsp init`: create the repository layout and wire up ast-grep (SPEC 15.1)."""
+"""`byolsp init`: create the repository layout and wire up ast-grep."""
 
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ def run_init(args: argparse.Namespace) -> int:
 def initialize_repo(
     repo_root: Path, config_dir: Path, options: InitOptions
 ) -> list[str]:
-    """Run init steps 1-7 (SPEC 15.1); returns summary lines for changes made."""
+    """Run init steps 1-7; returns summary lines for changes made."""
     messages: list[str] = []
     global_config = _bootstrap_global_dir(config_dir)
     repo_config = _ensure_repo_layout(repo_root, options.agents)
@@ -92,7 +92,7 @@ def initialize_repo(
     _, sync_result = sync_repo(repo_root, load_canonical_rules(config_dir))
     if sync_result.changed:
         messages.append(f"Synced {summarize_changes(sync_result)}")
-    # SPEC 15.1 step 8: doctor --quick, surfacing only the problems it finds.
+    # Run doctor --quick, surfacing only the problems it finds.
     messages.extend(quick_doctor_problems(repo_root, config_dir))
     return messages
 
@@ -112,7 +112,7 @@ def _bootstrap_global_dir(config_dir: Path) -> GlobalConfig:
 
 
 def _ensure_repo_layout(repo_root: Path, agents: list[str]) -> RepoConfig:
-    """Create .byolsp/ config files and rule directories (SPEC 6)."""
+    """Create .byolsp/ config files and rule directories."""
     config = _load_or_default_repo_config(repo_root)
     new_agents = [agent for agent in agents if agent not in config.agents]
     config.agents.extend(new_agents)
@@ -142,7 +142,7 @@ def _load_or_default_repo_config(repo_root: Path) -> RepoConfig:
 def _options_from_args(args: argparse.Namespace, defaults: InitDefaults) -> InitOptions:
     """Resolve init choices: explicit flag > global default > prompt/built-in.
 
-    Global defaults (SPEC 28.5) seed interactive prompts and stand in as the
+    Global defaults seed interactive prompts and stand in as the
     answers under `--non-interactive`; an explicit flag always overrides both.
     """
     interactive = not args.non_interactive
@@ -161,7 +161,7 @@ def _options_from_args(args: argparse.Namespace, defaults: InitDefaults) -> Init
     else:
         git_hooks = _resolve_git_hooks(defaults.git_hooks, interactive)
     hook_scope = _resolve_hook_scope(args, agents, interactive, defaults.hook_scope)
-    # The harness-neutral rule-capture skill installs by default (SPEC 27.2).
+    # The harness-neutral rule-capture skill installs by default.
     if "skill" not in agents:
         agents.append("skill")
     return InitOptions(
@@ -190,7 +190,7 @@ def _resolve_hook_scope(
     interactive: bool,
     default: str | None,
 ) -> HookScope:
-    """Ask hook scope once for all selected hook-capable agents (SPEC 28.3)."""
+    """Ask hook scope once for all selected hook-capable agents."""
     if args.hook_scope is not None:
         return args.hook_scope
     fallback: HookScope = "global" if default == "global" else "project"

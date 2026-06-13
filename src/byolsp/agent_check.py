@@ -1,4 +1,4 @@
-"""`byolsp agent-check`: ast-grep diagnostics rendered for AI agents (SPEC 15.9)."""
+"""`byolsp agent-check`: ast-grep diagnostics rendered for AI agents."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ def _run_hook(args: argparse.Namespace, repo_root: Path, harness: Harness) -> in
 
     Any internal byolsp error is swallowed to a silent exit 0 so a global-scope
     hook (which carries no shell `|| true` guard) cannot block the agent loop
-    on a byolsp bug or config problem (SPEC 28.3).
+    on a byolsp bug or config problem.
     """
     try:
         return _hook_diagnostics(args, repo_root, harness)
@@ -86,7 +86,7 @@ def _hook_diagnostics(
     """Parse the payload, scan, and emit per harness.
 
     Global hooks fire in every repo, so byolsp stays silent (exit 0) where
-    there is no `.byolsp/config.yml` to scope against (SPEC 28.3).
+    there is no `.byolsp/config.yml` to scope against.
     """
     if not repo_config_path(repo_root).is_file():
         return 0
@@ -164,7 +164,7 @@ def _render_limit(args: argparse.Namespace) -> int:
 
 
 def _resolve_scope(args: argparse.Namespace, harness: Harness | None) -> Scope:
-    """The diagnostic scope (SPEC 28.3): explicit flag wins, else per mode.
+    """The diagnostic scope: explicit flag wins, else per mode.
 
     Hook mode defaults to edit (payload contents locate the lines); `--files`
     defaults to file. The fallback chain edit -> diff -> file is applied later,
@@ -190,7 +190,7 @@ def _matches_in_scope(
     scope: Scope,
     payload: EditPayload | None,
 ) -> list[ScanMatch]:
-    """Matches overlapping their file's in-scope line ranges (SPEC 28.3).
+    """Matches overlapping their file's in-scope line ranges.
 
     A `None` range means the file could not be scoped (untracked, non-git,
     unborn HEAD, or — under edit scope — edit contents that could not be
@@ -268,7 +268,7 @@ def collect_diagnostics(matches: list[ScanMatch], repo_root: Path) -> list[Diagn
 
 
 def render_diagnostics(diagnostics: list[Diagnostic], limit: int) -> list[str]:
-    """The SPEC 15.9 text output; empty when there are no diagnostics."""
+    """The rendered text output; empty when there are no diagnostics."""
     if not diagnostics:
         return []
     total = len(diagnostics)

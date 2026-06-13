@@ -1,4 +1,4 @@
-"""Atomic text file writes (SPEC 17: write temp, flush, rename into place)."""
+"""Atomic text file writes (write temp, flush, rename into place)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Literal
 
 NEW_FILE_MODE = 0o666
 
-# The notice is load-bearing for ownership detection (SPEC 17); markers in
+# The notice is load-bearing for ownership detection; markers in
 # other comment dialects must derive from it so they stay in lockstep.
 MANAGED_NOTICE = "Managed by BYOLSP. Manual edits may be overwritten."
 
@@ -22,7 +22,7 @@ MarkedTextStatus = Literal["missing", "unmarked", "unchanged", "drifted"]
 
 
 def marked_text_status(path: Path, content: str, marker: str) -> MarkedTextStatus:
-    """Classify a path against the content a managed write would produce (SPEC 17).
+    """Classify a path against the content a managed write would produce.
 
     Files without the marker are user-owned; marker-bearing files that differ
     from `content` have drifted and need a rewrite.
@@ -38,7 +38,7 @@ def marked_text_status(path: Path, content: str, marker: str) -> MarkedTextStatu
 
 
 def write_marked_text(path: Path, content: str, marker: str) -> MarkedWriteResult:
-    """Converge a BYOLSP-managed file to `content` (SPEC 17).
+    """Converge a BYOLSP-managed file to `content`.
 
     Files without the marker are user-owned and never touched.
     """

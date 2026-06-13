@@ -1,4 +1,4 @@
-"""Per-harness post-edit hook configs, one converge-only-ours pipeline (SPEC 28.3).
+"""Per-harness post-edit hook configs, one converge-only-ours pipeline.
 
 Every harness stores its hooks as a JSON list of entries — at a harness-specific
 key path inside a harness-specific file — where each entry carries a shell
@@ -90,7 +90,7 @@ HOOK_SPECS: dict[Harness, HookSpec] = {
 
 
 def install_hook(repo_root: Path, harness: Harness, scope: HookScope) -> list[str]:
-    """Converge the harness's byolsp hook entry into its config (SPEC 28.3)."""
+    """Converge the harness's byolsp hook entry into its config."""
     spec = HOOK_SPECS[harness]
     path = _config_path(repo_root, spec, scope)
     relpath = _display_relpath(spec, scope)
@@ -108,7 +108,7 @@ def install_hook(repo_root: Path, harness: Harness, scope: HookScope) -> list[st
 
 
 def uninstall_hook(repo_root: Path, harness: Harness, scope: HookScope) -> list[str]:
-    """Drop byolsp-owned entries from the config; user entries stay (SPEC 17)."""
+    """Drop byolsp-owned entries from the config; user entries stay."""
     spec = HOOK_SPECS[harness]
     path = _config_path(repo_root, spec, scope)
     relpath = _display_relpath(spec, scope)
@@ -146,7 +146,7 @@ def hook_command(harness: Harness, scope: HookScope) -> str:
         # The harness reads exit 2 + stderr; the others read JSON on stdout.
         base = f"{base} >&2"
     # Only the committed, team-shared project config carries the teammate guard;
-    # global and local configs are personal (SPEC 28.3).
+    # global and local configs are personal.
     if scope != "project":
         return base
     guard = "command -v byolsp >/dev/null 2>&1 &&"

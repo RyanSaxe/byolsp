@@ -1,9 +1,9 @@
-"""Line-range scoping for diagnostics: diff hunks and edit locations (SPEC 28.3).
+"""Line-range scoping for diagnostics: diff hunks and edit locations.
 
 Pure interval logic plus two range sources — uncommitted `git diff HEAD`
 hunks and hook-payload edit strings located in the post-edit text. A `None`
 result always means "could not scope this file; treat every line as in
-scope", which is the SPEC 28.3 fallback chain ending at file scope.
+scope", which is the fallback chain ending at file scope.
 """
 
 from __future__ import annotations

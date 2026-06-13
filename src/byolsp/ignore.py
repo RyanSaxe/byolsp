@@ -1,4 +1,4 @@
-"""The marked git ignore block for BYOLSP's untracked generated state (SPEC 9),
+"""The marked git ignore block for BYOLSP's untracked generated state,
 plus the `.ignore` files that keep those rules visible to ast-grep.
 
 ast-grep's rule discovery respects gitignore, so the git-ignored personal rule

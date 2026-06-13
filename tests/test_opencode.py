@@ -1,4 +1,4 @@
-"""The OpenCode adapter: post-edit plugin plus instruction file (SPEC 27.3)."""
+"""The OpenCode adapter: post-edit plugin plus instruction file."""
 
 from pathlib import Path
 

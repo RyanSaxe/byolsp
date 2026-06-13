@@ -1,8 +1,8 @@
-"""Isolated ast-grep subprocess handling (SPEC sections 5, 20).
+"""Isolated ast-grep subprocess handling.
 
 Every ast-grep invocation lives here: executable resolution, version parsing,
 and (for agent-check) JSON scans. No rule-indexing logic. All subprocess
-calls pass argv lists, never shell strings (SPEC 19).
+calls pass argv lists, never shell strings.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ VERSION_PATTERN = re.compile(r"\d+(\.\d+)+")
 
 
 def resolve_ast_grep(command: str = "auto") -> Path:
-    """Locate the ast-grep executable (SPEC 5, 28.6).
+    """Locate the ast-grep executable.
 
     `$BYOLSP_AST_GREP` wins when set. Otherwise a non-`auto` `command` (the
     global config's `ast_grep.command`: a name or absolute path) is used
@@ -106,7 +106,7 @@ def scan_files(
     With no `files`, ast-grep scans the whole repository. The exit code is
     ignored when stdout is valid JSON (error-severity matches make ast-grep
     exit nonzero); unparseable output raises ByolspError with ast-grep's
-    own message (SPEC 15.9 tool error).
+    own message.
     """
     argv = [
         str(executable),

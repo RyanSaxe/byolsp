@@ -1,10 +1,10 @@
-"""The OpenCode adapter: a real post-edit plugin (SPEC 27.3).
+"""The OpenCode adapter: a real post-edit plugin.
 
 OpenCode discovers TypeScript plugins under .opencode/plugin/. Ours hooks
 tool.execute.after for the file-mutating tools, runs agent-check on the
 touched file, and appends any diagnostics to the tool output the model sees.
 A `//` comment marker stands in for the HTML-comment marker, which is not
-valid TypeScript (SPEC 17).
+valid TypeScript.
 """
 
 from __future__ import annotations

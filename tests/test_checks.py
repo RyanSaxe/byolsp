@@ -1,4 +1,4 @@
-"""Merge precedence, exclusion, and execution for extra checks (SPEC 28.4)."""
+"""Merge precedence, exclusion, and execution for extra checks."""
 
 import shlex
 import sys

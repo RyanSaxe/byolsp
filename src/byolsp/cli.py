@@ -91,7 +91,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _add_repo_argument(command: argparse.ArgumentParser) -> None:
-    """Every repo-operating command accepts --repo with these semantics (SPEC 15)."""
+    """Every repo-operating command accepts --repo with these semantics."""
     command.add_argument(
         "--repo", type=Path, help="Repository root (default: search upward from cwd)"
     )
@@ -318,7 +318,7 @@ def run(args: argparse.Namespace) -> int:
                 raise
             heal_message = None
         if heal_message is not None:
-            # stderr keeps stdout clean for JSON-emitting commands (SPEC 15.3/15.8).
+            # stderr keeps stdout clean for JSON-emitting commands.
             print(heal_message, file=sys.stderr)
     if args.command == "init":
         # Deferred so startup (--help, future hot paths) never pays for ruamel.
@@ -373,10 +373,10 @@ def run(args: argparse.Namespace) -> int:
 
 
 def _self_heal_preamble(args: argparse.Namespace) -> str | None:
-    """SPEC 15: every repo-operating command heals a stale repo before running.
+    """Every repo-operating command heals a stale repo before running.
 
     Returns the one-line heal summary (None when nothing changed) so doctor
-    can report what was healed (SPEC 15.3). Uninitialized repos heal silently.
+    can report what was healed. Uninitialized repos heal silently.
     """
     from byolsp.paths import global_config_dir, resolve_repo_root
     from byolsp.sync import heal_repo

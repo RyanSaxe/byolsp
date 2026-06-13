@@ -137,7 +137,7 @@ def test_doctor_renders_a_failing_check_for_invalid_rules(
     home: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """A broken rule stops the self-heal preamble's sync, but doctor must still
-    render its check table rather than abort (SPEC 15.3)."""
+    render its check table rather than abort."""
     repo = make_repo(home)
     broken = repo / ".byolsp" / "rules" / "project" / "broken.yml"
     broken.write_text("id: broken\n")

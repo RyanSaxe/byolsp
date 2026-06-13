@@ -137,7 +137,7 @@ def rule(rule_id: str, filename: str) -> Rule:
     )
 
 
-# One test per SPEC section 14 conflict table row.
+# One test per conflict table row.
 
 
 def test_duplicate_id_within_project_rules_is_an_error() -> None:

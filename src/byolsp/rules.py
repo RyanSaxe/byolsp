@@ -1,4 +1,4 @@
-"""Rule discovery, minimal parsing, and ID validation (SPEC sections 11, 12, 14)."""
+"""Rule discovery, minimal parsing, and ID validation."""
 
 from __future__ import annotations
 
@@ -20,12 +20,12 @@ RULE_FILE_SUFFIXES = (".yml", ".yaml")
 REQUIRED_AST_GREP_FIELDS = ("id", "language", "rule", "message")
 RECOMMENDED_ID_PATTERN = re.compile(r"[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)*")
 
-# The one place the suppression-comment syntax is spelled out (SPEC 28.1);
+# The one place the suppression-comment syntax is spelled out;
 # every instruction string interpolates it.
 SUPPRESSION_COMMENT = "# ast-grep-ignore: <rule-id> -- <short reason>"
 
 # The standard exception sentence an agent_prompt ends with when a rule
-# tolerates exceptions (SPEC 28.1). `byolsp add --allow-exceptions` appends it;
+# tolerates exceptions. `byolsp add --allow-exceptions` appends it;
 # the capture skill includes it when the user allows exceptions.
 ALLOW_EXCEPTIONS_SENTENCE = (
     f"If this is genuinely necessary, suppress with `{SUPPRESSION_COMMENT}` "
@@ -73,9 +73,9 @@ def discover_rule_files(rules_dir: Path) -> list[Path]:
 def load_rule(path: Path) -> Rule:
     """Minimally parse one rule file; every failure message names the file.
 
-    Strict only about the fields ast-grep requires (SPEC 11.1). The optional
+    Strict only about the fields ast-grep requires. The optional
     metadata.byolsp block degrades to defaults when malformed: ast-grep
-    ignores metadata, and deep validation is doctor's job (SPEC 15.4).
+    ignores metadata, and deep validation is doctor's job.
     """
     text = path.read_text(encoding="utf-8")
     try:
@@ -106,7 +106,7 @@ def load_rules(rules_dir: Path) -> list[Rule]:
 
 
 def rule_id_warnings(rules: Iterable[Rule]) -> list[str]:
-    """Warnings for IDs outside the recommended pattern (SPEC 11.2); never rejects."""
+    """Warnings for IDs outside the recommended pattern; never rejects."""
     return [
         f"{rule.path}: rule ID '{rule.id}' does not match the recommended"
         f" pattern {RECOMMENDED_ID_PATTERN.pattern}"
@@ -121,7 +121,7 @@ def scope_rules_dir(
     """The directory a scope's rules live in.
 
     For the global scope this is the canonical global rules root, never the
-    generated repo copy under personal/global (SPEC 12.3).
+    generated repo copy under personal/global.
     """
     if scope == "project":
         return repo_root / paths.project_rules
@@ -133,7 +133,7 @@ def scope_rules_dir(
 def check_id_conflicts(
     project: list[Rule], local: list[Rule], canonical_global: list[Rule]
 ) -> None:
-    """Enforce the SPEC section 14 conflict table.
+    """Enforce the rule-ID conflict table.
 
     Duplicate IDs within one scope and project/local collisions raise
     DuplicateRuleId. Project or local IDs matching global IDs are overrides,

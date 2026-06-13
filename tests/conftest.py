@@ -95,7 +95,7 @@ def mirror(repo: Path) -> Path:
 def make_editor(directory: Path, content: str) -> str:
     """An $EDITOR value whose command replaces the edited file with `content`.
 
-    Deliberately multi-word so it exercises the shlex.split contract (SPEC 19).
+    Deliberately multi-word so it exercises the shlex.split contract.
     """
     source = directory / "editor-replacement.yml"
     source.write_text(content)

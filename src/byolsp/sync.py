@@ -1,4 +1,4 @@
-"""Mirror canonical global rules into repositories (SPEC sections 3, 13, 15.2)."""
+"""Mirror canonical global rules into repositories."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ def compute_sync_plan(
     excluded_rule_ids: Iterable[str],
     canonical: CanonicalRules,
 ) -> SyncPlan:
-    """SPEC 13 steps 3-5: validate the loaded rules, decide the mirror contents.
+    """Validate the loaded rules and decide the mirror contents.
 
     Step 7 (combined effective IDs are unique) holds by construction: project
     and local IDs are unique and disjoint per check_id_conflicts, and every
@@ -96,7 +96,7 @@ def mirror_contents(mirror_dir: Path) -> dict[str, str]:
 
 
 def mirror_global_rules(mirror_dir: Path, desired: dict[str, str]) -> MirrorResult:
-    """Make the mirror's YAML contents exactly `desired` (SPEC 13 step 6).
+    """Make the mirror's YAML contents exactly `desired`.
 
     Copies new and changed files, deletes YAML files not in `desired`, prunes
     empty subdirectories, and leaves non-YAML files (.gitkeep) alone — except
@@ -120,7 +120,7 @@ def mirror_global_rules(mirror_dir: Path, desired: dict[str, str]) -> MirrorResu
 
 
 def repo_sync_plan(repo_root: Path, canonical: CanonicalRules) -> tuple[SyncPlan, Path]:
-    """One repository's sync plan plus its mirror directory (SPEC 13 steps 1-5)."""
+    """One repository's sync plan plus its mirror directory."""
     paths = load_repo_config(repo_root).paths
     plan = compute_sync_plan(
         load_rules(repo_root / paths.project_rules),
@@ -140,13 +140,13 @@ def sync_repo(
 
 
 def repo_is_stale(repo_root: Path, canonical: CanonicalRules) -> bool:
-    """The cheap staleness check (SPEC 13): path and content comparison."""
+    """The cheap staleness check: path and content comparison."""
     plan, mirror_dir = repo_sync_plan(repo_root, canonical)
     return mirror_contents(mirror_dir) != plan.desired
 
 
 def heal_repo(repo_root: Path, config_dir: Path) -> str | None:
-    """The self-heal preamble (SPEC 15): sync, returning one line when changed.
+    """The self-heal preamble: sync, returning one line when changed.
 
     Uninitialized repositories are skipped silently: the command being run
     will fail with its own clearer RepoNotInitialized error.
@@ -171,7 +171,7 @@ def summarize_changes(result: MirrorResult) -> str:
 
 
 def iter_registered_repos(config_dir: Path) -> Iterator[Path]:
-    """Registered repo roots that exist and are initialized, for fan-out (SPEC 3.2).
+    """Registered repo roots that exist and are initialized, for fan-out.
 
     Warns on stderr and skips registry entries whose path is gone or that have
     no .byolsp/config.yml.
@@ -216,7 +216,7 @@ def _sync_all(config_dir: Path, canonical: CanonicalRules, check: bool) -> int:
 
 
 def _sync_and_report(repo_root: Path, canonical: CanonicalRules) -> None:
-    """Sync one repo and print the SPEC 15.2 output."""
+    """Sync one repo and print its sync output."""
     plan, _ = sync_repo(repo_root, canonical)
     print(f"Synced {_count(len(plan.desired), 'global rule')} into {repo_root}")
     if plan.skipped:
@@ -226,7 +226,7 @@ def _sync_and_report(repo_root: Path, canonical: CanonicalRules) -> None:
 
 
 def _report_staleness(repo_root: Path, canonical: CanonicalRules) -> int:
-    """`sync --check`: report without writing; exit 3 when stale (SPEC 15.2)."""
+    """`sync --check`: report without writing; exit 3 when stale."""
     if repo_is_stale(repo_root, canonical):
         print(f"Sync is stale in {repo_root}; run `byolsp sync`.")
         return STALE_EXIT_CODE

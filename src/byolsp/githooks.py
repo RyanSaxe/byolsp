@@ -1,4 +1,4 @@
-"""Git hook shims that close the pull gap by running sync (SPEC 3.3, 15.11)."""
+"""Git hook shims that close the pull gap by running sync."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ SHIM_HOOK_NAMES = ("post-merge", "post-checkout")
 
 SHIM_MARKER = f"# {MANAGED_NOTICE}"
 
-# `|| true` so the shim can never block a git operation (SPEC 15.11).
+# `|| true` so the shim can never block a git operation.
 SHIM_LINE = "[ -d .byolsp ] && command -v byolsp >/dev/null 2>&1 && byolsp sync || true"
 
 SHIM_CONTENT = f"""#!/bin/sh

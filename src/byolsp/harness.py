@@ -1,4 +1,4 @@
-"""Normalized hook payloads and responses across the five harnesses (SPEC 28.3).
+"""Normalized hook payloads and responses across the five harnesses.
 
 Each harness pipes a different post-edit JSON shape on stdin and reads back a
 different feedback channel. This module is the single normalized pipeline:
@@ -36,7 +36,7 @@ class EditPayload:
     `edits[path]` holds the literal post-edit strings the harness reported for
     that file, used for edit-scope line ranges. A file present with no edit
     strings (or absent edits entirely) means "scope this file by diff" — the
-    SPEC 28.3 fallback when contents cannot be located.
+    Fallback when contents cannot be located.
     """
 
     files: list[Path] = field(default_factory=list)

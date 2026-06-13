@@ -1,4 +1,4 @@
-"""`byolsp list`: show rules and where they come from (SPEC 15.8)."""
+"""`byolsp list`: show rules and where they come from."""
 
 from __future__ import annotations
 

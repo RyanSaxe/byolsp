@@ -1,4 +1,4 @@
-"""Create or update sgconfig.yml so ast-grep sees the BYOLSP rule dirs (SPEC 8)."""
+"""Create or update sgconfig.yml so ast-grep sees the BYOLSP rule dirs."""
 
 from __future__ import annotations
 

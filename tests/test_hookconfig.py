@@ -1,4 +1,4 @@
-"""The generalized per-harness hook-config engine (SPEC 28.3)."""
+"""The generalized per-harness hook-config engine."""
 
 import json
 from pathlib import Path
@@ -53,7 +53,7 @@ def test_claude_code_global_command_is_unguarded_and_redirects(tmp_path: Path) -
 
 def test_only_project_scope_carries_the_teammate_guard() -> None:
     # The guard protects shared (committed) project configs; global and local
-    # are personal, so they run byolsp directly (SPEC 28.3).
+    # are personal, so they run byolsp directly.
     assert "command -v byolsp" in hook_command("claude-code", "project")
     assert "command -v byolsp" not in hook_command("claude-code", "local")
     assert "command -v byolsp" not in hook_command("claude-code", "global")

@@ -1,4 +1,4 @@
-"""Extra command-line checks run after ast-grep diagnostics (SPEC 28.4).
+"""Extra command-line checks run after ast-grep diagnostics.
 
 `checks:` entries in the repo and global configs name a command to run on the
 in-scope files whose extension matches. Repo checks win over global ones by
@@ -92,7 +92,7 @@ def load_effective_checks(repo_root: Path, config_dir: Path) -> list[EffectiveCh
 def run_checks(
     checks: list[EffectiveCheck], repo_root: Path, files: list[Path]
 ) -> CheckOutcome:
-    """Run each check whose extensions match an in-scope file (SPEC 28.4)."""
+    """Run each check whose extensions match an in-scope file."""
     outcome = CheckOutcome()
     for check in checks:
         matching = _matching_files(check.definition, files)

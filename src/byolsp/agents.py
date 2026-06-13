@@ -1,4 +1,4 @@
-"""AI agent adapters: instruction files and real hooks (SPEC 15.10, 16, 28.3)."""
+"""AI agent adapters: instruction files and real hooks."""
 
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ GENERIC_AGENT_INSTRUCTIONS = (
     f"{MANAGED_MARKER}\n\n# BYOLSP Agent Instructions\n\n{CORE_INSTRUCTION}"
 )
 
-# SPEC 27.4: every harness that auto-discovers skills gets the capture loop.
+# Every harness that auto-discovers skills gets the capture loop.
 SKILL_DISCOVERY_NOTE = (
     "{harness} also auto-discovers the `byolsp` rule-capture skill at\n"
     "`.agents/skills/byolsp/SKILL.md`; use it to turn the user's durable\n"
@@ -67,10 +67,10 @@ SKILL_DISCOVERY_NOTE = (
 
 
 def run_hook(args: argparse.Namespace) -> int:
-    """`byolsp hook install|uninstall --agent NAME [--hook-scope SCOPE]` (SPEC 28.3).
+    """`byolsp hook install|uninstall --agent NAME [--hook-scope SCOPE]`.
 
     Installed agents are recorded in ai.agents so doctor and uninstall know
-    about them (SPEC 10.1).
+    about them.
     """
     repo_root = resolve_repo_root(explicit=args.repo)
     config = load_repo_config(repo_root)
@@ -99,7 +99,7 @@ def run_hook(args: argparse.Namespace) -> int:
 def install_agents(
     repo_root: Path, agents: Sequence[str], hook_scope: HookScope = "project"
 ) -> list[str]:
-    """Init step 5: the generic README is part of the repository layout (SPEC 6);
+    """Init step 5: the generic README is part of the repository layout;
     the explicitly requested agents get their adapters on top.
     """
     messages = install_agent(repo_root, "generic", hook_scope)
@@ -117,7 +117,7 @@ def install_agent(
         return _install_skill(repo_root)
     messages: list[str] = []
     if agent == "opencode":
-        # A real post-edit plugin on top of the instruction file (SPEC 27.3).
+        # A real post-edit plugin on top of the instruction file.
         messages.extend(
             _write_managed_file(
                 repo_root,
@@ -138,7 +138,7 @@ def install_agent(
 
 
 def uninstall_agent(repo_root: Path, agent: str) -> list[str]:
-    """Remove one agent adapter; only marker-bearing files are deleted (SPEC 17)."""
+    """Remove one agent adapter; only marker-bearing files are deleted."""
     messages: list[str] = []
     if agent == "skill":
         for relpath in SKILL_RELPATHS:
@@ -179,7 +179,7 @@ def _as_harness(agent: str) -> Harness | None:
 
 
 def _install_skill(repo_root: Path) -> list[str]:
-    """Render the rule-capture skill into both discovery locations (SPEC 27.1)."""
+    """Render the rule-capture skill into both discovery locations."""
     messages: list[str] = []
     for relpath in SKILL_RELPATHS:
         messages.extend(_write_managed_file(repo_root, relpath, SKILL_MARKDOWN))
@@ -201,7 +201,7 @@ def _opencode_plugin_problems(repo_root: Path) -> list[str]:
 
 
 def _skill_render_problems(repo_root: Path) -> list[str]:
-    """Both renders must exist and match the canonical content (SPEC 27.2).
+    """Both renders must exist and match the canonical content.
 
     A marker-bearing render that drifted from the canonical content counts:
     `byolsp hook install --agent skill` refreshes it. Unmarked files at these

@@ -1,4 +1,4 @@
-"""The byolsp rule-capture skill: canonical SKILL.md content (SPEC 27.1).
+"""The byolsp rule-capture skill: canonical SKILL.md content.
 
 One skill, authored here, rendered identically into the two locations every
 major harness discovers natively. The frontmatter must start at byte 0 and

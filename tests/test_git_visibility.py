@@ -1,8 +1,8 @@
 """Personal rules in a real git repository, against the real ast-grep binary.
 
 ast-grep's rule discovery respects gitignore, so the git-ignored personal rule
-copies need the `.ignore` negation files to stay loadable (SPEC 6, 8, 24.4),
-while staying invisible to `git status` (SPEC 9).
+copies need the `.ignore` negation files to stay loadable,
+while staying invisible to `git status`.
 """
 
 import subprocess

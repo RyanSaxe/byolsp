@@ -1,4 +1,4 @@
-"""Line-range scoping: edit location, diff hunks, and overlap (SPEC 28.3)."""
+"""Line-range scoping: edit location, diff hunks, and overlap."""
 
 from pathlib import Path
 

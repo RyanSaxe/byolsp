@@ -1,4 +1,4 @@
-"""Typed load/save for the four BYOLSP config schemas (SPEC section 10)."""
+"""Typed load/save for the four BYOLSP config schemas."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class RepoPaths:
 
 @dataclass(frozen=True)
 class CheckDef:
-    """An extra command-line check run after ast-grep (SPEC 28.4).
+    """An extra command-line check run after ast-grep.
 
     `run` is shlex-split into argv; in-scope files are appended as trailing
     arguments. `extensions` (no dots) filters which files trigger the check.
@@ -59,7 +59,7 @@ class InitDefaults:
     """Global defaults for init's prompts and `--non-interactive` answers.
 
     `None` means "no global default; fall back to the built-in default"; an
-    explicit init flag always wins over both (SPEC 28.5).
+    explicit init flag always wins over both.
     """
 
     agents: list[str] | None = None
@@ -83,7 +83,7 @@ class GlobalConfig:
 
 
 def rule_dir_relpaths(paths: RepoPaths) -> list[str]:
-    """The three rule directories sgconfig.yml must list, repo-relative (SPEC 8)."""
+    """The three rule directories sgconfig.yml must list, repo-relative."""
     return [
         paths.project_rules,
         paths.personal_local_rules,
@@ -292,7 +292,7 @@ def _optional_string(section: CommentedMap, key: str, path: Path) -> str | None:
 
 
 def _check_defs(data: CommentedMap, path: Path) -> list[CheckDef]:
-    """Parse the `checks:` list shared by repo and global config (SPEC 28.4)."""
+    """Parse the `checks:` list shared by repo and global config."""
     value = data.get("checks")
     if value is None:
         return []

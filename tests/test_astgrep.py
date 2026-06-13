@@ -80,7 +80,7 @@ def test_resolution_falls_through_to_a_real_ast_grep(bin_dir: Path) -> None:
 def test_env_override_is_honored_or_fails_without_path_fallthrough(
     bin_dir: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    # SPEC 5/28.6: $BYOLSP_AST_GREP wins when set; a non-ast-grep override does
+    # $BYOLSP_AST_GREP wins when set; a non-ast-grep override does
     # not silently fall through to a valid ast-grep on PATH.
     fake_executable(bin_dir / "ast-grep")
     override = fake_executable(tmp_path / "elsewhere" / "sg", script="exit 1")

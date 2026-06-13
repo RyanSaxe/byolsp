@@ -1,4 +1,4 @@
-"""`byolsp doctor`: actionable installation health checks (SPEC 15.3)."""
+"""`byolsp doctor`: actionable installation health checks."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ from byolsp.yamlio import load_yaml_mapping
 
 @dataclass
 class Check:
-    """One doctor check, matching the SPEC 15.3 JSON shape."""
+    """One doctor check, matching the JSON output shape."""
 
     id: str
     ok: bool
@@ -59,7 +59,7 @@ def run_doctor(args: argparse.Namespace) -> int:
 
 
 def collect_checks(repo_root: Path, config_dir: Path, quick: bool) -> list[Check]:
-    """Run the SPEC 15.3 checks. `quick` skips recursive rule validation
+    """Run the health checks. `quick` skips recursive rule validation
     (rule parsing, ID uniqueness, sync staleness) but keeps the cheap checks.
     """
     global_config = load_global_config(config_dir)
@@ -80,7 +80,7 @@ def collect_checks(repo_root: Path, config_dir: Path, quick: bool) -> list[Check
 
 def quick_doctor_problems(repo_root: Path, config_dir: Path) -> list[str]:
     """Failing `doctor --quick` checks as printable lines, for the post-action
-    step that init, add, edit, and promote share (SPEC 15.1, 15.4-15.6).
+    step that init, add, edit, and promote share.
     """
     return [
         f"doctor: {check.id}: {check.message}"
@@ -210,7 +210,7 @@ def _registry_check(config_dir: Path, global_config: GlobalConfig) -> Check:
 def _extra_checks_check(
     repo_root: Path, repo_config: RepoConfig, global_config: GlobalConfig
 ) -> Check | None:
-    """List the extra checks agent-check would run, with origin (SPEC 28.4).
+    """List the extra checks agent-check would run, with origin.
 
     Informational (always ok); absent when no check is configured so the
     default doctor output is unchanged.
@@ -227,7 +227,7 @@ def _extra_checks_check(
 
 
 def _agent_files_check(repo_root: Path, repo_config: RepoConfig) -> Check:
-    """Each agent in ai.agents needs its integration files (SPEC 15.10)."""
+    """Each agent in ai.agents needs its integration files."""
     if not repo_config.agents:
         return Check("agent_files", True, "no AI agents configured")
     problems = agent_file_problems(repo_root, repo_config.agents)

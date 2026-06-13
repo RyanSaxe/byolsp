@@ -1,4 +1,4 @@
-"""Per-harness payload parsers and response emitters (SPEC 28.3)."""
+"""Per-harness payload parsers and response emitters."""
 
 import json
 from pathlib import Path

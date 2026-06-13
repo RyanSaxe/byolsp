@@ -1,4 +1,4 @@
-"""`byolsp agent-check` against the real ast-grep binary (SPEC 15.9)."""
+"""`byolsp agent-check` against the real ast-grep binary."""
 
 import io
 import json
@@ -18,7 +18,7 @@ CAST_PROMPT = (
     "signature, introducing a protocol, or restructuring the value flow."
 )
 
-# The SPEC 11.1 worked example, with agent_prompt folded to one line.
+# A worked example, with agent_prompt folded to one line.
 CAST_RULE = """\
 id: no-python-cast
 language: Python
@@ -226,7 +226,7 @@ def test_edit_scope_keeps_only_violations_inside_the_edited_lines(
 ) -> None:
     source = check_repo / "src.py"
     source.write_text("a = cast(int, 1)\nb = cast(int, 2)\nc = cast(int, 3)\n")
-    # The payload's new_string names only line 2 as the edit (SPEC 28.3).
+    # The payload's new_string names only line 2 as the edit.
     stdin(
         monkeypatch,
         {"tool_input": {"file_path": str(source), "new_string": "b = cast(int, 2)"}},

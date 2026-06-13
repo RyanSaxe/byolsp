@@ -161,7 +161,7 @@ def test_any_command_self_heals_a_stale_repo(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Running byolsp *anything* makes this repo correct (SPEC 3)."""
+    """Running byolsp *anything* makes this repo correct."""
     repo = make_repo(home)
     write_global_rule(home, "no-cast.yml", "no-cast")
     monkeypatch.chdir(repo)

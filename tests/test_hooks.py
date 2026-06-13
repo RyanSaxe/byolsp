@@ -1,4 +1,4 @@
-"""AI agent adapters and the `byolsp hook` command (SPEC 15.10, 16, 28.3)."""
+"""AI agent adapters and the `byolsp hook` command."""
 
 import json
 from pathlib import Path
@@ -39,7 +39,7 @@ def test_init_installs_instruction_files_for_requested_agents(home: Path) -> Non
         content = (repo / AGENTS_DIR / name).read_text()
         assert MANAGED_MARKER in content
         assert "byolsp agent-check" in content
-        # SPEC 27.4: both harnesses auto-discover the rule-capture skill.
+        # Both harnesses auto-discover the rule-capture skill.
         assert "`byolsp` rule-capture skill" in content
         assert ".agents/skills/byolsp" in content
 

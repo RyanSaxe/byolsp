@@ -1,4 +1,4 @@
-"""Rule-mutating commands: add, edit, promote, exclude, include (SPEC 15.4-15.7)."""
+"""Rule-mutating commands: add, edit, promote, exclude, include."""
 
 from __future__ import annotations
 
@@ -174,7 +174,7 @@ def run_promote(args: argparse.Namespace) -> int:
             f"{display_path(destination, context.repo_root)} already exists; "
             "rerun with --replace to overwrite it."
         )
-    # SPEC 14 conflict check on the post-promote state, before any write. With
+    # Conflict check on the post-promote state, before any write. With
     # --keep-local this fails: keeping the local original would leave project
     # and local rules sharing the ID, which ast-grep rejects.
     remove_source = source_scope == "local" and not args.keep_local
@@ -211,7 +211,7 @@ def run_include(args: argparse.Namespace) -> int:
         save_local_config(context.repo_root, local)
         print(f"Re-enabled '{args.rule_id}'")
     plan = _sync_and_report(context.repo_root, context.canonical)
-    # A project or local rule may still own the ID (SPEC 15.7): say so.
+    # A project or local rule may still own the ID: say so.
     for rule_id, reason in plan.skipped:
         if rule_id == args.rule_id:
             print(f"'{rule_id}' is still skipped: {reason}")
@@ -226,9 +226,9 @@ def _build_template(rule_id: str | None, language: str | None) -> str:
 
 def _append_exception_sentence(content: str) -> str:
     """Rule text whose metadata.byolsp.agent_prompt ends with the standard
-    exception sentence (SPEC 28.1), creating the metadata path when absent.
+    exception sentence, creating the metadata path when absent.
 
-    A missing agent_prompt is seeded from `message` — the SPEC 11.1 fallback —
+    A missing agent_prompt is seeded from `message` — the documented fallback —
     so the prompt still carries the fix instruction, not just the escape hatch.
     Callers pass already-validated rule YAML, so the parse error path never
     fires and the source name is a placeholder.
@@ -253,11 +253,11 @@ def _append_exception_sentence(content: str) -> str:
 def _find_rule(
     context: RepoContext, rule_id: str, requested: RuleScope | Literal["auto"]
 ) -> tuple[RuleScope, Rule]:
-    """Resolve a rule ID to its scope and parsed rule (SPEC 15.5).
+    """Resolve a rule ID to its scope and parsed rule.
 
     `auto` tries project, then local, then canonical global. The global scope
     searches the canonical rules root, so a generated copy under
-    personal/global is never opened (SPEC 12.3).
+    personal/global is never opened.
     """
     if requested == "auto":
         scopes: tuple[RuleScope, ...] = ("project", "local", "global")
@@ -316,7 +316,7 @@ def _with_draft_hint(error: ByolspError, draft: Path | None) -> ByolspError:
 def _check_conflicts(
     context: RepoContext, scope: RuleScope, rule: Rule, removed: set[Path]
 ) -> None:
-    """Enforce SPEC 14 for the rule set as it would be after writing `rule`.
+    """Enforce the conflict table for the rule set as it would be after writing `rule`.
 
     `removed` holds the file paths the command replaces or deletes, so their
     current contents do not count against the new rule.
@@ -353,7 +353,7 @@ def _scope_dir(context: RepoContext, scope: RuleScope) -> Path:
 def _finish(context: RepoContext, fan_out: bool) -> None:
     """The shared post-action: sync, then surface `doctor --quick` problems.
 
-    Global-scope mutations fan out to every registered repo (SPEC 3.2) and
+    Global-scope mutations fan out to every registered repo and
     reload the canonical rules the mutation just changed; everything else
     syncs the current repo with the rules already in hand.
     """

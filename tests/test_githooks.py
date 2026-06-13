@@ -1,4 +1,4 @@
-"""Git hook shims installed by `byolsp init --git-hooks` (SPEC 15.11)."""
+"""Git hook shims installed by `byolsp init --git-hooks`."""
 
 import os
 from pathlib import Path

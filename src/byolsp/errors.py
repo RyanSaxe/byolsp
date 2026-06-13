@@ -8,7 +8,7 @@ class ByolspError(Exception):
 
 
 class AstGrepNotFound(ByolspError):
-    """No usable ast-grep executable could be resolved (SPEC section 5)."""
+    """No usable ast-grep executable could be resolved."""
 
 
 class ConfigError(ByolspError):
@@ -24,7 +24,7 @@ class RuleValidationError(ByolspError):
 
 
 class DuplicateRuleId(ByolspError):
-    """Two rule files share an ID in a way ast-grep would reject (SPEC section 14)."""
+    """Two rule files share an ID in a way ast-grep would reject."""
 
 
 class UnsafeOverwrite(ByolspError):

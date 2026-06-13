@@ -1,4 +1,4 @@
-"""The byolsp rule-capture skill: rendering, installation, doctor (SPEC 27)."""
+"""The byolsp rule-capture skill: rendering, installation, doctor."""
 
 import re
 from pathlib import Path
@@ -99,7 +99,7 @@ def test_doctor_flags_missing_or_drifted_renders_and_install_repairs(
 
 
 def test_claude_code_install_writes_both_the_hook_and_instructions(home: Path) -> None:
-    """SPEC 28.3 normalizes claude-code to a real hook plus its instruction file,
+    """claude-code installs a real hook plus its instruction file,
     alongside the skill render the layout already plants under .claude/skills/.
     """
     repo = make_repo(home)
