@@ -166,14 +166,6 @@ init:
 Codex, Copilot, Cursor, OpenCode, and Pi auto-discover the `byor` rule-capture
 skill from `.agents/skills/byor/SKILL.md`, so they get the capture loop natively.
 
-**Google Antigravity** also reads skills from `.agents/skills/`, so it gets the
-rule-capture skill with no byor setup (the skill is installed by default).
-byor does not install a post-edit feedback hook for it: Antigravity's hooks are
-an allow/deny/ask gate (`{"decision": ..., "reason": ...}`), not a channel for
-appending diagnostics, so the "let the edit land, then surface diagnostics"
-loop the other harnesses use does not fit. Antigravity users still get terminal
-and editor diagnostics through plain `ast-grep`.
-
 ### skill
 
 The rule-capture skill teaches agents to *create* rules from your feedback,

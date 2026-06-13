@@ -105,10 +105,6 @@ byor supports six harnesses, at both project and global registration scope:
 | OpenCode | yes | `tool.execute.after` plugin | the changed file |
 | Pi | yes | `tool_result` extension | the changed file |
 
-Google Antigravity reads skills from `.agents/skills/` too, so it gets the
-rule-capture skill automatically — no feedback hook, since its hooks are an
-allow/deny gate rather than a diagnostics channel.
-
 Beyond ast-grep rules, a `checks:` section (in `.byor/config.yml` or your
 global config) runs extra command-line tools — `ruff`, a type checker, anything
 — on the changed files and folds their output into the same agent feedback. See
