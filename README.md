@@ -57,6 +57,12 @@ post-edit hook; `--scope edit|diff|file` controls which lines a diagnostic
 must touch to be reported (hooks default to `edit`, exactly the lines the
 agent just changed).
 
+Beyond ast-grep rules, a `checks:` section in `.byolsp/config.yml` or the
+global config runs extra command-line linters (e.g. `ruff`) on the in-scope
+files and folds their failures into the same agent feedback. The global config
+also carries an `init:` section whose defaults seed `byolsp init`'s prompts and
+`--non-interactive` answers. See [docs/ai-agents.md](docs/ai-agents.md).
+
 | Harness | Skill | Instructions | Real hook | Payload precision | Registration |
 | --- | --- | --- | --- | --- | --- |
 | Claude Code | yes | yes | `PostToolUse` | edited lines | project, global, local |

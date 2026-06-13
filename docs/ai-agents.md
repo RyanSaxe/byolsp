@@ -36,7 +36,8 @@ byolsp agent-check [--repo PATH] [--files FILE ...] [--scope edit|diff|file]
 Runs `ast-grep scan --json=compact --include-metadata --color never` on the
 given files (the whole repository when `--files` is omitted) and renders each
 match with the rule's `metadata.byolsp.agent_prompt`, falling back to
-`message` when the rule has none.
+`message` when the rule has none. It then runs any configured extra checks (see
+[Extra checks](#extra-checks)) on the in-scope files.
 
 Exit codes:
 
@@ -90,6 +91,41 @@ for the added lines. Payloads without a recognizable file — including malforme
 ones — exit 0 without scanning, and hook mode is silent in a repo with no
 `.byolsp/config.yml`, so a hook can never block the agent loop.
 
+## Extra checks
+
+`agent-check` can run extra command-line checks after ast-grep. Declare them
+under `checks:` in `.byolsp/config.yml` (committed, shared with the team) or in
+the global config (personal, every repo):
+
+```yaml
+checks:
+  - name: ruff
+    extensions: [py]
+    run: uv run ruff check --output-format concise
+```
+
+`run` is shlex-split into argv and invoked directly (never through a shell);
+the in-scope files whose extension is listed in `extensions` are appended as
+trailing arguments (an empty `extensions` matches every in-scope file). Checks
+merge by `name` with the repo config winning over the global one, and
+`.byolsp/local.yml` disables them per repo:
+
+```yaml
+checks:
+  excluded:
+    - ruff
+```
+
+A check that exits nonzero has its raw stdout and stderr appended under a
+`### <name>` header on the same channel as the diagnostics, and makes
+`agent-check` exit `2`. A check whose command cannot be found prints one
+warning line to stderr and is skipped — it never crashes the hook. `byolsp
+list` and `byolsp doctor` show the effective checks with their origin and any
+exclusions.
+
+Trust model: committed checks run on every contributor's machine, the same
+model as pre-commit hooks. Only add checks whose commands you trust.
+
 ## Installing and removing integrations
 
 ```bash
@@ -111,6 +147,19 @@ Generated files carry the marker
 `<!-- Managed by BYOLSP. Manual edits may be overwritten. -->` (a `//` comment
 equivalent in TypeScript). `uninstall` removes only marker-bearing files;
 anything you edited (the marker removed) is preserved with a message.
+
+The global config can carry an `init:` section whose values become `byolsp
+init`'s defaults — the pre-selected answer for each interactive prompt and the
+answer used under `--non-interactive`. An explicit init flag always overrides
+the global default.
+
+```yaml
+init:
+  agents: [claude-code, codex]
+  ignore_mode: local
+  git_hooks: true
+  hook_scope: global
+```
 
 ## Per-agent status
 
