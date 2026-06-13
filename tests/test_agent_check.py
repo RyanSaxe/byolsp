@@ -248,6 +248,29 @@ def test_codex_hook_edit_scopes_an_apply_patch_and_emits_its_json(
     assert "src.py:2:5" in context
 
 
+def test_codex_relative_patch_path_resolves_against_the_repo_root(
+    check_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (check_repo / "src.py").write_text("a = cast(int, 1)\n")
+    patch = (
+        "*** Begin Patch\n"
+        "*** Update File: src.py\n"  # relative, as codex reports it
+        "@@\n"
+        "+a = cast(int, 1)\n"
+        "*** End Patch"
+    )
+    stdin(monkeypatch, {"tool_input": {"command": patch}})
+
+    assert check(check_repo, "--stdin-hook", "codex") == 0
+
+    context = json.loads(capsys.readouterr().out)["hookSpecificOutput"][
+        "additionalContext"
+    ]
+    assert "src.py:1:5" in context
+
+
 def test_hook_mode_is_silent_in_an_uninitialized_repo(
     home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

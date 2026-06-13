@@ -67,7 +67,7 @@ def _run_hook(args: argparse.Namespace, repo_root: Path, harness: Harness) -> in
     """
     if not repo_config_path(repo_root).is_file():
         return 0
-    payload = _resolved_payload(parse_payload(harness, sys.stdin.read()))
+    payload = _resolved_payload(parse_payload(harness, sys.stdin.read()), repo_root)
     if not payload.files:
         return 0
     scope = _resolve_scope(args, harness)
@@ -176,11 +176,19 @@ def _edit_ranges_for(file: Path, payload: EditPayload) -> list[Range] | None:
     return edit_ranges(file.read_text(encoding="utf-8"), contents)
 
 
-def _resolved_payload(payload: EditPayload) -> EditPayload:
-    """Resolve the payload's paths so they match the scanned files' keys."""
+def _resolved_payload(payload: EditPayload, repo_root: Path) -> EditPayload:
+    """Resolve the payload's paths so they match the scanned files' keys.
+
+    A relative path from the harness is taken against the repo root, where the
+    agent runs, not the process cwd, so it lines up with the scanned files.
+    """
+
+    def resolve(path: Path) -> Path:
+        return path.resolve() if path.is_absolute() else (repo_root / path).resolve()
+
     return EditPayload(
-        files=[file.resolve() for file in payload.files],
-        edits={file.resolve(): contents for file, contents in payload.edits.items()},
+        files=[resolve(file) for file in payload.files],
+        edits={resolve(file): contents for file, contents in payload.edits.items()},
     )
 
 
