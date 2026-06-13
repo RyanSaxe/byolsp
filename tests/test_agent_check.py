@@ -354,3 +354,20 @@ def test_scan_failure_is_a_clean_tool_error(
     captured = capsys.readouterr()
     assert "scan` failed" in captured.err
     assert "Traceback" not in captured.err
+
+
+def test_hook_mode_fails_open_on_an_internal_error(
+    check_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The same broken sgconfig that errors under --files must never block the
+    # agent: a global-scope hook has no shell `|| true`, so byolsp exits 0 itself.
+    (check_repo / "sgconfig.yml").write_text("ruleDirs: 5\n")
+    source = check_repo / "src.py"
+    source.write_text('x = cast(int, "1")\n')
+    stdin(monkeypatch, {"tool_input": {"file_path": str(source)}})
+
+    assert check(check_repo, "--stdin-hook", "claude-code") == 0
+
+    assert capsys.readouterr().out == ""

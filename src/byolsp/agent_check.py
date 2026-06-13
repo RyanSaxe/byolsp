@@ -60,7 +60,22 @@ def _run_files(
 
 
 def _run_hook(args: argparse.Namespace, repo_root: Path, harness: Harness) -> int:
-    """The `--stdin-hook HARNESS` path: parse the payload, emit per harness.
+    """The `--stdin-hook HARNESS` path: fail-open, never block the agent.
+
+    Any internal byolsp error is swallowed to a silent exit 0 so a global-scope
+    hook (which carries no shell `|| true` guard) cannot block the agent loop
+    on a byolsp bug or config problem (SPEC 28.3).
+    """
+    try:
+        return _hook_diagnostics(args, repo_root, harness)
+    except Exception:
+        return 0
+
+
+def _hook_diagnostics(
+    args: argparse.Namespace, repo_root: Path, harness: Harness
+) -> int:
+    """Parse the payload, scan, and emit per harness.
 
     Global hooks fire in every repo, so byolsp stays silent (exit 0) where
     there is no `.byolsp/config.yml` to scope against (SPEC 28.3).

@@ -298,8 +298,17 @@ def _add_doctor_arguments(command: argparse.ArgumentParser) -> None:
 SELF_SYNCING_COMMANDS = frozenset({"init", "sync"})
 
 
+def _is_hook_invocation(args: argparse.Namespace) -> bool:
+    """A fail-open hook call (`agent-check --stdin-hook`) must never self-heal:
+    a healing error would surface as a non-zero exit and block the agent.
+    """
+    return (
+        args.command == "agent-check" and getattr(args, "stdin_hook", None) is not None
+    )
+
+
 def run(args: argparse.Namespace) -> int:
-    if args.command not in SELF_SYNCING_COMMANDS:
+    if args.command not in SELF_SYNCING_COMMANDS and not _is_hook_invocation(args):
         try:
             heal_message = _self_heal_preamble(args)
         except ByolspError:
