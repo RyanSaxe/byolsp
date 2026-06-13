@@ -52,6 +52,19 @@ do this" into an ast-grep rule: the agent drafts the rule, confirms with one
 question, then creates it with `byolsp add`. See
 [docs/ai-agents.md](docs/ai-agents.md).
 
+`byolsp hook install --agent X --hook-scope project|global` registers a real
+post-edit hook; `--scope edit|diff|file` controls which lines a diagnostic
+must touch to be reported (hooks default to `edit`, exactly the lines the
+agent just changed).
+
+| Harness | Skill | Instructions | Real hook | Payload precision | Registration |
+| --- | --- | --- | --- | --- | --- |
+| Claude Code | yes | yes | `PostToolUse` | edited lines | project, global, local |
+| Codex | yes | yes | `PostToolUse` | apply_patch added lines | project, global |
+| Copilot CLI | yes | yes | `postToolUse` | best-effort path | project, global |
+| Cursor | yes | yes | `postToolUse` | edited lines | project, global |
+| OpenCode | yes | yes | `tool.execute.after` plugin | changed file | project, global |
+
 ## Why copies, not symlinks
 
 Global rules are canonical in `~/.config/byolsp/rules/` and copied into each

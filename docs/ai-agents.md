@@ -4,18 +4,20 @@ BYOLSP turns your ast-grep rules into directive feedback for AI coding
 agents. Every agent integration wraps the same command:
 
 ```bash
-byolsp agent-check --files <changed files>
+byolsp agent-check --scope diff --files <changed files>
 ```
 
 Humans keep using `ast-grep scan` directly; `agent-check` exists to render
-rule-specific instructions back into an agent's context.
+rule-specific instructions back into an agent's context. Real post-edit hooks
+use `--stdin-hook HARNESS` instead, which scopes to the exact edited lines.
 
 ## Generic integration
 
 `byolsp init` writes `.byolsp/agents/README.md` with the core instruction:
 
-> After writing or editing code, run `byolsp agent-check --files <changed
-> files>`. If BYOLSP reports a diagnostic, fix it before continuing. If a
+> After writing or editing code, run `byolsp agent-check --scope diff --files
+> <changed files>`. If BYOLSP reports a diagnostic, fix it before continuing.
+> If a
 > rule's instruction permits exceptions, only keep the violating code when
 > genuinely necessary, and suppress it with
 > `# ast-grep-ignore: <rule-id> -- <short reason>` on its own line above the
@@ -72,29 +74,38 @@ render cap. `--format json` prints all diagnostics as
 "code", "instruction"}, ...]}` with 1-based positions and repo-relative paths.
 
 `--scope` keeps only diagnostics whose lines overlap the chosen ranges
-(default: `file`). `diff` scopes to uncommitted `git diff HEAD` lines — an
-untracked file is all new lines, and without usable git history the whole
-file stays in scope. `edit` scopes to the lines a hook payload's edit
-touched, so it requires `--stdin-hook`, and falls back to `diff` then `file`
-when the edit contents cannot be located. Under `edit`/`diff` scope, files
-missing on disk are skipped silently.
+(default: `file` with `--files`, `edit` in hook mode). `diff` scopes to
+uncommitted `git diff HEAD` lines — an untracked file is all new lines, and
+without usable git history the whole file stays in scope. `edit` scopes to the
+lines a hook payload's edit touched, so it requires `--stdin-hook`, and falls
+back to `diff` then `file` when the edit contents cannot be located. Under
+`edit`/`diff` scope, files missing on disk are skipped silently.
 
-`--stdin-hook` (instead of `--files`) reads a Claude Code PostToolUse JSON
-payload on stdin and scans the `tool_input.file_path` it names. Payloads
-without a file path — including malformed ones — exit 0 without scanning, so
-the hook can never block the agent loop.
+`--stdin-hook HARNESS` (claude-code|codex|copilot|cursor, instead of `--files`)
+reads that harness's post-edit JSON payload on stdin, normalizes it to the
+edited file(s) and edit text, and replies in the harness's own feedback format
+(claude-code via stderr + exit 2; codex/copilot/cursor via a JSON envelope on
+stdout). Codex payloads carry an `apply_patch` envelope, which byolsp parses
+for the added lines. Payloads without a recognizable file — including malformed
+ones — exit 0 without scanning, and hook mode is silent in a repo with no
+`.byolsp/config.yml`, so a hook can never block the agent loop.
 
 ## Installing and removing integrations
 
 ```bash
-byolsp hook install --agent generic|claude-code|codex|copilot|opencode|skill
-byolsp hook uninstall --agent generic|claude-code|codex|copilot|opencode|skill
+byolsp hook install --agent AGENT [--hook-scope project|global|local]
+byolsp hook uninstall --agent AGENT
 ```
 
-`byolsp init` also installs the agents you select (interactively or via
-`--agents`), plus the harness-neutral `skill` by default. Installed agents are
-recorded under `ai.agents` in `.byolsp/config.yml`, which `doctor` and
-`hook uninstall` use.
+`AGENT` is one of `generic`, `claude-code`, `codex`, `copilot`, `cursor`,
+`opencode`, or `skill`. `--hook-scope` chooses where a real hook registers:
+`project` (committed config, with a `command -v byolsp` guard so teammates
+without byolsp are unaffected), `global` (under `~/`, personal), or `local`
+(claude-code's `.claude/settings.local.json` only). `byolsp init` installs the
+agents you select (interactively or via `--agents`), plus the harness-neutral
+`skill` by default, asking project vs global once for all hook-capable agents.
+Installed agents are recorded under `ai.agents` in `.byolsp/config.yml`, which
+`doctor` and `hook uninstall` use.
 
 Generated files carry the marker
 `<!-- Managed by BYOLSP. Manual edits may be overwritten. -->` (a `//` comment
@@ -103,17 +114,18 @@ anything you edited (the marker removed) is preserved with a message.
 
 ## Per-agent status
 
-| Agent | v0.1 integration |
+| Agent | Integration |
 | --- | --- |
 | `generic` | Instruction file: `.byolsp/agents/README.md` |
-| `claude-code` | Real PostToolUse hook when `.claude/` exists; otherwise instruction file `.byolsp/agents/claude-code.md` with the exact wiring |
-| `codex` | Instruction file `.byolsp/agents/codex.md`; copy the instruction into `AGENTS.md` |
-| `copilot` | Instruction file `.byolsp/agents/copilot.md`; copy the instruction into `.github/copilot-instructions.md` |
-| `opencode` | Real post-edit plugin `.opencode/plugin/byolsp.ts` plus instruction file `.byolsp/agents/opencode.md` |
+| `claude-code` | Real `PostToolUse` hook (`.claude/settings.json`, `settings.local.json`, or `~/.claude/settings.json`) plus instruction file `.byolsp/agents/claude-code.md` |
+| `codex` | Real `PostToolUse` hook (`.codex/hooks.json` or `~/.codex/hooks.json`, matcher `Edit\|Write`) plus instruction file; copy the instruction into `AGENTS.md` |
+| `copilot` | Real `postToolUse` hook (`.github/hooks/byolsp.json` or `~/.copilot/hooks/byolsp.json`) plus instruction file; copy the instruction into `.github/copilot-instructions.md` |
+| `cursor` | Real `postToolUse` hook (`.cursor/hooks.json` or `~/.cursor/hooks.json`) plus instruction file `.byolsp/agents/cursor.md` |
+| `opencode` | Real `tool.execute.after` plugin `.opencode/plugin/byolsp.ts` plus instruction file `.byolsp/agents/opencode.md` |
 | `skill` | Rule-capture skill rendered identically into `.agents/skills/byolsp/SKILL.md` and `.claude/skills/byolsp/SKILL.md`; installed by `init` by default |
 
-Codex, Copilot, and OpenCode auto-discover the `byolsp` rule-capture skill
-from `.agents/skills/byolsp/SKILL.md`, so all three get the capture loop
+Codex, Copilot, Cursor, and OpenCode auto-discover the `byolsp` rule-capture
+skill from `.agents/skills/byolsp/SKILL.md`, so they get the capture loop
 natively; their instruction files say so.
 
 ### skill
@@ -163,10 +175,10 @@ accepted as is.
 OpenCode supports real post-edit hooks through TypeScript plugins. Install
 writes `.opencode/plugin/byolsp.ts`, which hooks `tool.execute.after`: when
 the tool is `edit`, `write`, or `apply_patch`, it runs
-`byolsp agent-check --files <file>` on the touched file and, on exit 2,
-appends the diagnostics to the tool output the model sees. Any other exit
-code appends nothing, so a byolsp configuration error never breaks the agent
-loop.
+`byolsp agent-check --scope diff --files <file>` on the touched file and, on
+exit 2, appends the diagnostics to the tool output the model sees. Any other
+exit code appends nothing, so a byolsp configuration error never breaks the
+agent loop.
 
 Install also writes the standard instruction file `.byolsp/agents/opencode.md`,
 which tells the model the plugin covers `edit`, `write`, and `apply_patch`
@@ -176,10 +188,10 @@ via shell commands).
 
 ### claude-code
 
-When the repo has a `.claude/` directory holding more than the byolsp skill
-render, install merges this hook into
-`.claude/settings.json` (created if absent; existing keys and hook groups
-preserved):
+Install merges a `PostToolUse` hook into the settings file for the chosen
+scope — `.claude/settings.json` (project), `.claude/settings.local.json`
+(local), or `~/.claude/settings.json` (global) — creating it if absent and
+preserving existing keys and hook groups:
 
 ```json
 {
@@ -190,7 +202,7 @@ preserved):
         "hooks": [
           {
             "type": "command",
-            "command": "byolsp agent-check --stdin-hook >&2"
+            "command": "byolsp agent-check --stdin-hook claude-code >&2"
           }
         ]
       }
@@ -199,11 +211,12 @@ preserved):
 }
 ```
 
-Claude Code pipes the tool-call JSON to the hook on stdin (which
-`--stdin-hook` parses) and, on exit 2, feeds the hook's stderr back to the
-model — hence `>&2`: `agent-check` exits 2 exactly when there are
-diagnostics, so the instructions reach the model only when something needs
-fixing.
+A project-scope command is wrapped in a `command -v byolsp` guard so a
+teammate without byolsp is unaffected. Claude Code pipes the tool-call JSON to
+the hook on stdin (which `--stdin-hook claude-code` parses) and, on exit 2,
+feeds the hook's stderr back to the model — hence `>&2`: `agent-check` exits 2
+exactly when there are diagnostics, so the instructions reach the model only
+when something needs fixing.
 
 Install is idempotent. `uninstall` removes only hook groups whose every
 command is byolsp's; a group you mixed your own hooks into counts as
