@@ -54,17 +54,17 @@ def resolve_ast_grep(command: str = "auto") -> Path:
 
 @dataclass
 class ScanMatch:
-    """One `ast-grep scan` match; line and column are 0-based as reported.
+    """One `ast-grep scan` match; line and column are 1-based.
 
-    Deliberately raw ast-grep output (SPEC 20 keeps this module isolated):
-    rendering transforms live with the consumer, in agent_check.Diagnostic.
+    ast-grep reports 0-based positions; the parse normalizes them once so
+    every consumer (linescope ranges, agent_check.Diagnostic) speaks 1-based.
     """
 
     file: str
     line: int
     column: int
     end_line: int
-    """range.end.line: the last line the match spans, 0-based as reported."""
+    """range.end.line: the last line the match spans, 1-based."""
 
     rule_id: str
     severity: str
@@ -173,6 +173,7 @@ def _string_field(match: dict[str, object], key: str) -> str:
 
 
 def _match_positions(match: dict[str, object]) -> tuple[int, int, int]:
+    """1-based (line, column, end_line); ast-grep's JSON is 0-based."""
     span = match.get("range")
     start = span.get("start") if isinstance(span, dict) else None
     end = span.get("end") if isinstance(span, dict) else None
@@ -185,7 +186,7 @@ def _match_positions(match: dict[str, object]) -> tuple[int, int, int]:
         or not isinstance(end_line, int)
     ):
         raise ByolspError("unexpected ast-grep scan JSON: missing 'range' positions")
-    return line, column, end_line
+    return line + 1, column + 1, end_line + 1
 
 
 def _agent_prompt(match: dict[str, object]) -> str | None:

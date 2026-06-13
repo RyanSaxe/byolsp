@@ -114,8 +114,8 @@ def test_scan_parses_matches_with_metadata(tmp_path: Path) -> None:
     assert result.warnings == ""
     (match,) = result.matches
     assert match.file == str(project / "src.py")
-    # 0-based, as ast-grep reports.
-    assert (match.line, match.column, match.end_line) == (0, 4, 0)
+    # 1-based; ast-grep's 0-based JSON is normalized at the parse.
+    assert (match.line, match.column, match.end_line) == (1, 5, 1)
     assert match.rule_id == "no-python-cast"
     assert match.severity == "warning"
     assert match.message == "Avoid typing.cast in Python code."
@@ -130,7 +130,7 @@ def test_scan_reports_the_end_line_of_a_multi_line_match(tmp_path: Path) -> None
     result = scan_files(resolve_ast_grep(), project, [project / "src.py"])
 
     (match,) = result.matches
-    assert (match.line, match.end_line) == (1, 4)
+    assert (match.line, match.end_line) == (2, 5)
 
 
 def test_scan_without_metadata_yields_no_agent_prompt(tmp_path: Path) -> None:

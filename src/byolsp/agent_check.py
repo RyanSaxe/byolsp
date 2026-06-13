@@ -104,7 +104,7 @@ def _matches_in_scope(matches: list[ScanMatch], repo_root: Path) -> list[ScanMat
             file = (repo_root / match.file).resolve()
             ranges_by_file[match.file] = diff_ranges(repo_root, file)
         ranges = ranges_by_file[match.file]
-        if ranges is None or overlaps(match.line + 1, match.end_line + 1, ranges):
+        if ranges is None or overlaps(match.line, match.end_line, ranges):
             in_scope.append(match)
     return in_scope
 
@@ -135,8 +135,8 @@ def collect_diagnostics(matches: list[ScanMatch], repo_root: Path) -> list[Diagn
     diagnostics = [
         Diagnostic(
             file=display_path(Path(match.file), repo_root),
-            line=match.line + 1,
-            column=match.column + 1,
+            line=match.line,
+            column=match.column,
             rule_id=match.rule_id,
             severity=match.severity,
             message=match.message,
