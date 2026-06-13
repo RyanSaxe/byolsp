@@ -13,7 +13,12 @@ from pathlib import Path
 from typing import Literal
 
 from byolsp.errors import ConfigError
-from byolsp.fsio import MarkedWriteResult, write_marked_text, write_text_atomic
+from byolsp.fsio import (
+    MANAGED_NOTICE,
+    MarkedWriteResult,
+    write_marked_text,
+    write_text_atomic,
+)
 
 IgnoreMode = Literal["project", "local"]
 
@@ -26,10 +31,10 @@ IGNORED_PATTERNS = (
     ".byolsp/rules/personal/global/**/*.yaml",
 )
 
-BLOCK_BEGIN = "# >>> Managed by BYOLSP. Manual edits may be overwritten. >>>"
+BLOCK_BEGIN = f"# >>> {MANAGED_NOTICE} >>>"
 BLOCK_END = "# <<< Managed by BYOLSP <<<"
 
-VISIBILITY_MARKER = "# Managed by BYOLSP. Manual edits may be overwritten."
+VISIBILITY_MARKER = f"# {MANAGED_NOTICE}"
 
 VISIBILITY_PATTERNS = ("!*.yml", "!*.yaml")
 
