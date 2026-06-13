@@ -26,7 +26,6 @@ metadata:
   byolsp:
     rationale: casting hides type model problems.
     agent_prompt: Do not use typing.cast here.
-    allow_with_comment: true
     docs_url: https://example.com/no-python-cast
     tags:
       - python
@@ -76,7 +75,6 @@ def test_load_rule_parses_byolsp_metadata(tmp_path: Path) -> None:
     assert rule.byolsp == ByolspMetadata(
         rationale="casting hides type model problems.",
         agent_prompt="Do not use typing.cast here.",
-        allow_with_comment=True,
         docs_url="https://example.com/no-python-cast",
         tags=["python", "typing"],
     )
@@ -117,7 +115,7 @@ def test_load_rule_degrades_malformed_metadata_to_defaults(tmp_path: Path) -> No
         "metadata:\n"
         "  byolsp:\n"
         "    agent_prompt: Keep this prompt.\n"
-        "    allow_with_comment: sometimes\n"
+        "    rationale: [not, a, string]\n"
         "    tags: python\n"
     )
 

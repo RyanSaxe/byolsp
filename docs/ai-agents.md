@@ -15,10 +15,11 @@ rule-specific instructions back into an agent's context.
 `byolsp init` writes `.byolsp/agents/README.md` with the core instruction:
 
 > After writing or editing code, run `byolsp agent-check --files <changed
-> files>`. If BYOLSP reports a diagnostic, fix it before continuing. If a rule
-> says an exception is allowed with a comment, only keep the violating code
-> when the code is genuinely necessary and add a concise comment explaining
-> why.
+> files>`. If BYOLSP reports a diagnostic, fix it before continuing. If a
+> rule's instruction permits exceptions, only keep the violating code when
+> genuinely necessary, and suppress it with
+> `# ast-grep-ignore: <rule-id> -- <short reason>` on its own line above the
+> violation.
 
 Point any agent harness at that file (or copy the instruction into the
 harness's own instruction location) and the loop works.

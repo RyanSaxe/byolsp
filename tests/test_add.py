@@ -30,7 +30,8 @@ def test_add_without_source_prints_template_and_hint(
     out = capsys.readouterr().out
     assert "id: REPLACE_ME" in out
     assert "language: Python" in out
-    assert "allow_with_comment: false" in out
+    assert "agent_prompt: REPLACE_ME" in out
+    assert "allow_with_comment" not in out
     assert "Rerun with --from FILE or --edit" in out
 
     assert add(repo, "--scope", "project", "--id", "no-cast", "--language", "Go") == 0

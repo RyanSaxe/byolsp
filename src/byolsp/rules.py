@@ -27,7 +27,6 @@ class ByolspMetadata:
 
     rationale: str | None = None
     agent_prompt: str | None = None
-    allow_with_comment: bool = False
     docs_url: str | None = None
     tags: list[str] = field(default_factory=list)
 
@@ -166,7 +165,6 @@ def _byolsp_metadata(data: CommentedMap) -> ByolspMetadata:
     return ByolspMetadata(
         rationale=_lenient_string(block, "rationale"),
         agent_prompt=_lenient_string(block, "agent_prompt"),
-        allow_with_comment=block.get("allow_with_comment") is True,
         docs_url=_lenient_string(block, "docs_url"),
         tags=_lenient_string_list(block, "tags"),
     )

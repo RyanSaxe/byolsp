@@ -25,7 +25,6 @@ metadata:
       signature, introducing a protocol, or restructuring the value flow. If
       the cast is genuinely necessary, leave a concise comment explaining the
       invariant that the type checker cannot see.
-    allow_with_comment: true
     tags:
       - python
       - typing
@@ -40,9 +39,22 @@ Optional `metadata.byolsp` fields, all ignored by ast-grep itself:
 | --- | --- |
 | `rationale` | Why the rule exists, for humans reading the file |
 | `agent_prompt` | What `byolsp agent-check` tells an AI agent to do; falls back to `message` when absent |
-| `allow_with_comment` | Signals that a justified exception with a comment is acceptable (default `false`) |
 | `docs_url` | Link to fuller documentation |
 | `tags` | Free-form labels (default `[]`) |
+
+## Exceptions
+
+Exception policy lives in `agent_prompt` prose, not in schema fields. A rule
+that tolerates exceptions says so in its `agent_prompt`, ending with the
+suppression idiom native to `ast-grep scan` and `ast-grep lsp`:
+
+```python
+# ast-grep-ignore: <rule-id> -- <short reason>
+```
+
+The comment goes on its own line directly above the violation. Always include
+the rule id (a bare `ast-grep-ignore` silences every rule on the next line)
+and keep the reason short.
 
 ## Rule IDs
 
@@ -183,7 +195,6 @@ metadata:
       boundary, stable public API, semantic name, or compatibility layer. Inline
       the call or use the real function directly. If this wrapper is genuinely
       necessary, leave a concise comment explaining the boundary it protects.
-    allow_with_comment: true
     tags:
       - python
       - abstraction

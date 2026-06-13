@@ -29,7 +29,6 @@ metadata:
     agent_prompt: >
       Do not use typing.cast here. Fix the type by narrowing, changing the
       signature, introducing a protocol, or restructuring the value flow.
-    allow_with_comment: true
 """
 
 # No metadata, so the instruction falls back to the message; error severity

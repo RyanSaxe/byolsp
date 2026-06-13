@@ -53,7 +53,6 @@ metadata:
   byolsp:
     rationale: REPLACE_ME
     agent_prompt: REPLACE_ME
-    allow_with_comment: false
     tags: []
 """
 
