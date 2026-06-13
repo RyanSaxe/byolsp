@@ -69,6 +69,14 @@ def test_claude_code_global_command_is_unguarded_and_redirects(tmp_path: Path) -
     assert command == f"{BYOLSP_COMMAND_SIGNATURE} claude-code >&2"
 
 
+def test_only_project_scope_carries_the_teammate_guard() -> None:
+    # The guard protects shared (committed) project configs; global and local
+    # are personal, so they run byolsp directly (SPEC 28.3).
+    assert "command -v byolsp" in hook_command("claude-code", "project")
+    assert "command -v byolsp" not in hook_command("claude-code", "local")
+    assert "command -v byolsp" not in hook_command("claude-code", "global")
+
+
 @pytest.mark.parametrize("harness", HARNESS_CHOICES)
 def test_install_is_idempotent(harness: Harness, tmp_path: Path) -> None:
     install_hook(tmp_path, harness, "project")

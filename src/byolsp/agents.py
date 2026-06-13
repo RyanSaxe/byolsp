@@ -10,14 +10,21 @@ from byolsp.config import load_repo_config, save_repo_config
 from byolsp.errors import ConfigError
 from byolsp.fsio import MANAGED_MARKER, marked_text_status, write_marked_text
 from byolsp.harness import HARNESS_CHOICES, Harness
-from byolsp.hookconfig import HookScope, install_hook, uninstall_hook
+from byolsp.hookconfig import (
+    HookScope,
+    install_hook,
+    installed_scopes,
+    supports_local_scope,
+    uninstall_hook,
+)
 from byolsp.opencode import OPENCODE_MARKER, OPENCODE_PLUGIN, OPENCODE_PLUGIN_RELPATH
 from byolsp.paths import resolve_repo_root
 from byolsp.rules import SUPPRESSION_COMMENT
 from byolsp.skill import SKILL_MARKDOWN, SKILL_RELPATHS
 
-# The four real-hook harnesses plus the OpenCode plugin and the bare adapters.
+# The four real-hook harnesses: a set for membership, a map for Harness lookup.
 HOOK_HARNESSES: frozenset[str] = frozenset(HARNESS_CHOICES)
+HARNESS_BY_NAME: dict[str, Harness] = {harness: harness for harness in HARNESS_CHOICES}
 
 AGENT_CHOICES = (
     "generic",
@@ -68,7 +75,10 @@ def run_hook(args: argparse.Namespace) -> int:
     repo_root = resolve_repo_root(explicit=args.repo)
     config = load_repo_config(repo_root)
     if args.hook_action == "install":
-        if args.hook_scope == "local" and args.agent != "claude-code":
+        harness = _as_harness(args.agent)
+        if args.hook_scope == "local" and (
+            harness is None or not supports_local_scope(harness)
+        ):
             raise ConfigError("--hook-scope local is only supported for claude-code")
         messages = install_agent(repo_root, args.agent, args.hook_scope)
         recorded = args.agent not in config.agents
@@ -136,7 +146,7 @@ def uninstall_agent(repo_root: Path, agent: str) -> list[str]:
         return messages
     harness = _as_harness(agent)
     if harness is not None:
-        for scope in _agent_hook_scopes(agent):
+        for scope in installed_scopes(harness):
             messages.extend(uninstall_hook(repo_root, harness, scope))
     if agent == "opencode":
         messages.extend(
@@ -165,17 +175,7 @@ def agent_file_problems(repo_root: Path, agents: Sequence[str]) -> list[str]:
 
 def _as_harness(agent: str) -> Harness | None:
     """The Harness for an agent that drives a real hook, else None."""
-    for harness in HARNESS_CHOICES:
-        if harness == agent:
-            return harness
-    return None
-
-
-def _agent_hook_scopes(agent: str) -> tuple[HookScope, ...]:
-    """Scopes a harness may have written hooks to; uninstall sweeps all of them."""
-    if agent == "claude-code":
-        return ("project", "global", "local")
-    return ("project", "global")
+    return HARNESS_BY_NAME.get(agent)
 
 
 def _install_skill(repo_root: Path) -> list[str]:

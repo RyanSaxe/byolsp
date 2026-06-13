@@ -15,15 +15,11 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, TypeAlias
+from typing import Literal
 
 from byolsp.errors import ConfigError
 from byolsp.fsio import write_text_atomic
-from byolsp.harness import Harness
-
-JsonValue: TypeAlias = (
-    "None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]"
-)
+from byolsp.harness import Harness, JsonValue
 
 HookScope = Literal["project", "global", "local"]
 
@@ -36,11 +32,11 @@ BYOLSP_COMMAND_SIGNATURE = "byolsp agent-check --stdin-hook"
 
 @dataclass(frozen=True)
 class HookSpec:
-    """The four per-harness edges of the shared converge pipeline."""
+    """The per-harness edges of the shared converge pipeline."""
 
     harness: Harness
     project_relpath: str
-    """Repo-relative config path for project (and local) scope."""
+    """Repo-relative config path for project scope."""
     global_relpath: str
     """Path relative to the harness's global dir."""
     key_path: tuple[str, ...]
@@ -49,6 +45,10 @@ class HookSpec:
     """An entry's matcher value, or None for harnesses without matchers."""
     nests_command: bool
     """True when the command lives in a nested hooks[] list (claude/codex)."""
+    local_relpath: str | None = None
+    """Repo-relative path for local scope, or None for harnesses without one."""
+    stderr_feedback: bool = False
+    """True when the harness reads feedback from stderr + exit 2, not stdout JSON."""
 
 
 HOOK_SPECS: dict[Harness, HookSpec] = {
@@ -59,6 +59,8 @@ HOOK_SPECS: dict[Harness, HookSpec] = {
         key_path=("hooks", "PostToolUse"),
         matcher="Write|Edit|MultiEdit|NotebookEdit",
         nests_command=True,
+        local_relpath=".claude/settings.local.json",
+        stderr_feedback=True,
     ),
     "codex": HookSpec(
         harness="codex",
@@ -85,8 +87,6 @@ HOOK_SPECS: dict[Harness, HookSpec] = {
         nests_command=False,
     ),
 }
-
-CLAUDE_LOCAL_RELPATH = ".claude/settings.local.json"
 
 
 def install_hook(repo_root: Path, harness: Harness, scope: HookScope) -> list[str]:
@@ -140,15 +140,29 @@ def hook_installed(repo_root: Path, harness: Harness, scope: HookScope) -> bool:
 
 def hook_command(harness: Harness, scope: HookScope) -> str:
     """The shell command an entry runs, guarded for shared project scope."""
+    spec = HOOK_SPECS[harness]
     base = f"{BYOLSP_COMMAND_SIGNATURE} {harness}"
-    if harness == "claude-code":
-        # Claude reads exit 2 + stderr; the others read JSON on stdout.
+    if spec.stderr_feedback:
+        # The harness reads exit 2 + stderr; the others read JSON on stdout.
         base = f"{base} >&2"
-    if scope == "global":
+    # Only the committed, team-shared project config carries the teammate guard;
+    # global and local configs are personal (SPEC 28.3).
+    if scope != "project":
         return base
-    # A teammate without byolsp installed must be unaffected (SPEC 28.3).
     guard = "command -v byolsp >/dev/null 2>&1 &&"
     return f"{guard} {base} || true"
+
+
+def supports_local_scope(harness: Harness) -> bool:
+    """Whether the harness has a local-scope config (claude-code's only)."""
+    return HOOK_SPECS[harness].local_relpath is not None
+
+
+def installed_scopes(harness: Harness) -> tuple[HookScope, ...]:
+    """Scopes a harness's hook may live in; uninstall sweeps all of them."""
+    if supports_local_scope(harness):
+        return ("project", "global", "local")
+    return ("project", "global")
 
 
 def global_hook_dir(harness: Harness, home: Path) -> Path:
@@ -166,7 +180,7 @@ _GLOBAL_DIRS: dict[Harness, str] = {
 
 def _config_path(repo_root: Path, spec: HookSpec, scope: HookScope) -> Path:
     if scope == "local":
-        return repo_root / CLAUDE_LOCAL_RELPATH
+        return repo_root / _local_relpath(spec)
     if scope == "global":
         return global_hook_dir(spec.harness, Path.home()) / spec.global_relpath
     return repo_root / spec.project_relpath
@@ -174,10 +188,16 @@ def _config_path(repo_root: Path, spec: HookSpec, scope: HookScope) -> Path:
 
 def _display_relpath(spec: HookSpec, scope: HookScope) -> str:
     if scope == "local":
-        return CLAUDE_LOCAL_RELPATH
+        return _local_relpath(spec)
     if scope == "global":
         return f"~/{_GLOBAL_DIRS[spec.harness]}/{spec.global_relpath}"
     return spec.project_relpath
+
+
+def _local_relpath(spec: HookSpec) -> str:
+    if spec.local_relpath is None:
+        raise ConfigError(f"{spec.harness} has no local-scope hook config")
+    return spec.local_relpath
 
 
 def _byolsp_entry(spec: HookSpec, scope: HookScope) -> dict[str, JsonValue]:
