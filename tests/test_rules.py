@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from conftest import write_rule
 
 from byolsp.config import RepoPaths
 from byolsp.errors import DuplicateRuleId, RuleValidationError
@@ -31,18 +32,6 @@ metadata:
       - python
       - typing
 """
-
-
-def write_rule(path: Path, rule_id: str) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        f"id: {rule_id}\n"
-        "language: Python\n"
-        "message: Avoid this pattern.\n"
-        "rule:\n"
-        "  pattern: cast($TYPE, $VALUE)\n"
-    )
-    return path
 
 
 def test_discovery_finds_yaml_files_recursively_and_sorted(tmp_path: Path) -> None:

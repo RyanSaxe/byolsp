@@ -2,13 +2,9 @@ import shutil
 from pathlib import Path
 
 import pytest
-from conftest import make_repo, write_global_rule, write_rule
+from conftest import make_repo, mirror, write_global_rule, write_rule
 
 from byolsp.cli import main
-
-
-def mirror(repo: Path) -> Path:
-    return repo / ".byolsp" / "rules" / "personal" / "global"
 
 
 def sync(repo: Path, *extra: str) -> int:
