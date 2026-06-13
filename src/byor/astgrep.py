@@ -19,12 +19,12 @@ from pathlib import Path
 from byor.errors import AstGrepNotFound, ByorError
 
 NOT_FOUND_MESSAGE = (
-    "ast-grep is required but was not found.\n"
+    "A working ast-grep could not be found.\n"
     "\n"
-    "Install it, then rerun this command:\n"
+    "ast-grep normally ships with byor (the ast-grep-cli dependency). If you\n"
+    "set $BYOR_AST_GREP or ast_grep.command, point it at a working ast-grep —\n"
+    "or install one and put it on PATH:\n"
     "  brew install ast-grep\n"
-    "\n"
-    "Other install options:\n"
     "  https://ast-grep.github.io/guide/quick-start.html"
 )
 
@@ -129,7 +129,7 @@ def scan_files(
 
 
 def ast_grep_version(executable: Path) -> str:
-    """The version `executable --version` reports, e.g. '0.43.0'."""
+    """The version `executable --version` reports, e.g. '0.42.3'."""
     result = _run_version(executable)
     if result is None:
         raise AstGrepNotFound(f"could not run `{executable} --version`")
@@ -160,7 +160,7 @@ def _run_version(executable: Path) -> subprocess.CompletedProcess[str] | None:
 def _parse_ast_grep_version(result: subprocess.CompletedProcess[str]) -> str | None:
     """The ast-grep version named in a `--version` result, or None.
 
-    ast-grep prints `ast-grep 0.43.0`; a bare version number alone is rejected
+    ast-grep prints `ast-grep 0.42.3`; a bare version number alone is rejected
     so the unix `sg` (setgroups) tool, which has no such output, falls through.
     """
     if result.returncode != 0:

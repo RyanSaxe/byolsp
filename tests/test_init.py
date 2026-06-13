@@ -186,7 +186,7 @@ def test_init_ends_with_quick_doctor_surfacing_problems(
     assert init(repo) == 0
 
     out = capsys.readouterr().out
-    assert "doctor: ast_grep_found: ast-grep is required but was not found." in out
+    assert "doctor: ast_grep_found: A working ast-grep could not be found." in out
     assert f"Initialized BYOR in {repo}" in out
 
 

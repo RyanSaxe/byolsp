@@ -13,8 +13,11 @@ your terminal, your editor, and your AI agent's feedback loop.
 ## Requirements
 
 - Python 3.11+ (run via [uv](https://docs.astral.sh/uv/): `uvx byor`)
-- [ast-grep](https://ast-grep.github.io/guide/quick-start.html) 0.43.0 or
-  newer on `PATH` (`brew install ast-grep`), installed separately
+
+[ast-grep](https://ast-grep.github.io) ships with byor (the `ast-grep-cli`
+dependency), so a plain install carries everything. To use a specific build
+instead, put `ast-grep` on `PATH` or point `$BYOR_AST_GREP` at it — byor
+prefers that over the bundled one.
 
 ## Quickstart
 
