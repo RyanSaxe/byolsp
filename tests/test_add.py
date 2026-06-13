@@ -212,7 +212,7 @@ def test_allow_exceptions_appends_to_an_existing_agent_prompt(home: Path) -> Non
     )
 
 
-def test_allow_exceptions_creates_agent_prompt_when_metadata_is_absent(
+def test_allow_exceptions_seeds_agent_prompt_from_message_when_absent(
     home: Path,
 ) -> None:
     repo = make_repo(home)
@@ -224,7 +224,7 @@ def test_allow_exceptions_creates_agent_prompt_when_metadata_is_absent(
     )
 
     written = load_rule(repo / ".byolsp" / "rules" / "project" / "no-cast.yml")
-    assert written.byolsp.agent_prompt == ALLOW_EXCEPTIONS_SENTENCE
+    assert written.byolsp.agent_prompt == f"Avoid this. {ALLOW_EXCEPTIONS_SENTENCE}"
 
 
 def test_allow_exceptions_with_edit_keeps_the_prefilled_sentence(

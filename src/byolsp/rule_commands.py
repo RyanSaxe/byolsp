@@ -228,6 +228,8 @@ def _append_exception_sentence(content: str) -> str:
     """Rule text whose metadata.byolsp.agent_prompt ends with the standard
     exception sentence (SPEC 28.1), creating the metadata path when absent.
 
+    A missing agent_prompt is seeded from `message` — the SPEC 11.1 fallback —
+    so the prompt still carries the fix instruction, not just the escape hatch.
     Callers pass already-validated rule YAML, so the parse error path never
     fires and the source name is a placeholder.
     """
@@ -241,6 +243,8 @@ def _append_exception_sentence(content: str) -> str:
         block = CommentedMap()
         metadata["byolsp"] = block
     prompt = block.get("agent_prompt")
+    if not isinstance(prompt, str):
+        prompt = data.get("message")
     existing = prompt.strip() if isinstance(prompt, str) else ""
     block["agent_prompt"] = f"{existing} {ALLOW_EXCEPTIONS_SENTENCE}".lstrip()
     return dump_yaml(data)

@@ -117,8 +117,9 @@ byolsp add --scope project|local|global [--id RULE_ID] [--language LANGUAGE]
   substituted) and asks you to rerun with one of them.
 - `--allow-exceptions` ends the rule's `agent_prompt` with the standard
   suppression sentence (see [Exceptions](#exceptions)): pre-filled in the
-  `--edit` template, appended to the copied rule with `--from` (creating
-  `metadata.byolsp.agent_prompt` when absent).
+  `--edit` template, appended to the copied rule with `--from`. When the rule
+  has no `metadata.byolsp.agent_prompt`, it is created seeded from `message`
+  so the prompt still carries the fix instruction.
 
 The new rule is written as `<rule-id>.yml` at the scope's rule root, then
 validated: YAML parses, required fields present, no illegal ID conflict. With
