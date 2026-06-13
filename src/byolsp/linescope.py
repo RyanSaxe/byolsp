@@ -9,9 +9,10 @@ scope", which is the SPEC 28.3 fallback chain ending at file scope.
 from __future__ import annotations
 
 import re
-import subprocess
 from collections.abc import Sequence
 from pathlib import Path
+
+from byolsp.gitio import git_stdout
 
 Range = tuple[int, int]
 """A 1-based inclusive line range."""
@@ -28,10 +29,10 @@ def diff_ranges(repo_root: Path, file: Path) -> list[Range] | None:
     yields []; pure deletions leave no post-image lines, so they
     contribute nothing.
     """
-    tracked = _git_stdout(repo_root, "ls-files", "--", str(file))
+    tracked = git_stdout(repo_root, "ls-files", "--", str(file))
     if not tracked:
         return None
-    diff = _git_stdout(repo_root, "diff", "HEAD", "-U0", "--no-color", "--", str(file))
+    diff = git_stdout(repo_root, "diff", "HEAD", "-U0", "--no-color", "--", str(file))
     if diff is None:
         return None
     ranges: list[Range] = []
@@ -96,17 +97,3 @@ def _occurrence_ranges(text: str, needle: str) -> list[Range]:
 
 def _normalize_newlines(text: str) -> str:
     return text.replace("\r\n", "\n")
-
-
-def _git_stdout(repo_root: Path, *args: str) -> str | None:
-    """Stdout of a git query, or None when git is missing or it fails."""
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(repo_root), *args],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
-        return None
-    return result.stdout if result.returncode == 0 else None

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 from byolsp.errors import ConfigError
 from byolsp.fsio import write_marked_text
+from byolsp.gitio import git_stdout
 
 SHIM_HOOK_NAMES = ("post-merge", "post-checkout")
 
@@ -73,14 +73,5 @@ def _hooks_dir(repo_root: Path) -> Path:
 
 def _git_output(repo_root: Path, *args: str) -> str | None:
     """Stripped stdout of a git query, or None when git is missing or it fails."""
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(repo_root), *args],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
-        return None
-    output = result.stdout.strip()
-    return output if result.returncode == 0 and output else None
+    output = (git_stdout(repo_root, *args) or "").strip()
+    return output or None
