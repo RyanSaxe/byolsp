@@ -130,14 +130,9 @@ def scan_files(
 
 def ast_grep_version(executable: Path) -> str:
     """The version `executable --version` reports, e.g. '0.43.0'."""
-    try:
-        result = subprocess.run(
-            [str(executable), "--version"], capture_output=True, text=True
-        )
-    except OSError as error:
-        raise AstGrepNotFound(
-            f"could not run `{executable} --version`: {error}"
-        ) from error
+    result = _run_version(executable)
+    if result is None:
+        raise AstGrepNotFound(f"could not run `{executable} --version`")
     version = _parse_ast_grep_version(result)
     if version is None:
         raise AstGrepNotFound(
@@ -148,13 +143,18 @@ def ast_grep_version(executable: Path) -> str:
 
 def _reports_ast_grep_version(executable: Path) -> bool:
     """Whether `executable --version` succeeds and names an ast-grep version."""
+    result = _run_version(executable)
+    return result is not None and _parse_ast_grep_version(result) is not None
+
+
+def _run_version(executable: Path) -> subprocess.CompletedProcess[str] | None:
+    """Run `executable --version`, or None when the executable cannot run."""
     try:
-        result = subprocess.run(
+        return subprocess.run(
             [str(executable), "--version"], capture_output=True, text=True
         )
     except OSError:
-        return False
-    return _parse_ast_grep_version(result) is not None
+        return None
 
 
 def _parse_ast_grep_version(result: subprocess.CompletedProcess[str]) -> str | None:
