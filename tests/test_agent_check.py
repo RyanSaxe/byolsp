@@ -44,6 +44,17 @@ rule:
   pattern: print($$$ARGS)
 """
 
+# A call that spans several source lines, so its match range covers more than
+# one line — used to test multi-line overlap under edit scope.
+FOO_RULE = """\
+id: no-foo
+language: Python
+severity: warning
+message: Do not call foo.
+rule:
+  pattern: foo($$$ARGS)
+"""
+
 
 @pytest.fixture
 def check_repo(home: Path, capsys: pytest.CaptureFixture[str]) -> Path:
@@ -398,6 +409,81 @@ def test_diff_scope_keeps_uncommitted_lines_and_untracked_files(
     out = capsys.readouterr().out
     locations = re.findall(r"^\S+\.py:\d+:\d+$", out, flags=re.MULTILINE)
     assert locations == ["new.py:1:5", "src.py:2:5"]
+
+
+def test_edit_scope_falls_back_to_diff_when_the_edit_cannot_be_located(
+    check_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An edit payload whose text is not in the file drops to diff scope: a
+    committed violation stays silent while an uncommitted one is reported."""
+    git(check_repo, "init", "--quiet")
+    source = commit_file(check_repo, "src.py", "a = cast(int, 1)\n")
+    source.write_text("a = cast(int, 1)\nb = cast(int, 2)\n")  # line 2 uncommitted
+    stdin(
+        monkeypatch,
+        {"tool_input": {"file_path": str(source), "new_string": "absent text"}},
+    )
+
+    assert check(check_repo, "--stdin-hook", "claude-code") == 2
+
+    out = capsys.readouterr().out
+    assert out.count("Rule: no-python-cast") == 1  # only the uncommitted line 2
+    assert "src.py:2:5" in out
+
+
+def test_edit_scope_falls_all_the_way_to_file_scope_without_git(
+    check_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Edit unlocatable and no git history: diff scope is None too, so the
+    chain reaches file scope and every match is reported."""
+    source = check_repo / "src.py"
+    source.write_text("a = cast(int, 1)\nb = cast(int, 2)\n")
+    stdin(
+        monkeypatch,
+        {"tool_input": {"file_path": str(source), "new_string": "absent text"}},
+    )
+
+    assert check(check_repo, "--stdin-hook", "claude-code") == 2
+
+    assert capsys.readouterr().out.count("Rule: no-python-cast") == 2
+
+
+def test_edit_scope_keeps_a_multiline_match_touched_on_an_inner_line(
+    check_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A diagnostic spanning several lines is kept when the edit touches any of
+    them, not only its first line."""
+    (check_repo / ".byor" / "rules" / "project" / "no-foo.yml").write_text(FOO_RULE)
+    source = check_repo / "src.py"
+    source.write_text("result = foo(\n    1,\n    2,\n)\n")  # foo(...) spans lines 1-4
+    # The payload names only line 2 of the four-line call.
+    stdin(
+        monkeypatch,
+        {"tool_input": {"file_path": str(source), "new_string": "    1,"}},
+    )
+
+    assert check(check_repo, "--stdin-hook", "claude-code") == 2
+
+    assert "Rule: no-foo" in capsys.readouterr().out
+
+
+def test_diff_scope_in_a_non_git_repo_degrades_to_file_scope(
+    check_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """No git history means no diff to scope against, so diff scope reports
+    every match rather than erroring."""
+    source = check_repo / "src.py"
+    source.write_text('x = cast(int, "1")\n')
+
+    assert check(check_repo, "--files", str(source), "--scope", "diff") == 2
+
+    assert "Rule: no-python-cast" in capsys.readouterr().out
 
 
 def test_edit_scope_without_a_hook_payload_is_a_clean_error(
