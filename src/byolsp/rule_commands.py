@@ -84,7 +84,9 @@ def repo_context(args: argparse.Namespace) -> RepoContext:
 
 
 def run_add(args: argparse.Namespace) -> int:
-    template = _build_template(args.id, args.language, args.allow_exceptions)
+    template = _build_template(args.id, args.language)
+    if args.allow_exceptions:
+        template = _append_exception_sentence(template)
     if args.from_file is None and not args.edit:
         print(template)
         print("Rerun with --from FILE or --edit to create the rule.")
@@ -102,7 +104,7 @@ def run_add(args: argparse.Namespace) -> int:
         else:
             rule = _load_source_rule(args.from_file)
             if args.allow_exceptions:
-                rule = _with_exception_sentence(rule)
+                rule = replace(rule, content=_append_exception_sentence(rule.content))
         destination = _scope_dir(context, scope) / f"{rule.id}.yml"
         if destination.exists():
             raise UnsafeOverwrite(
@@ -216,27 +218,20 @@ def run_include(args: argparse.Namespace) -> int:
     return 0
 
 
-def _build_template(
-    rule_id: str | None, language: str | None, allow_exceptions: bool
-) -> str:
-    template = RULE_TEMPLATE.format(
+def _build_template(rule_id: str | None, language: str | None) -> str:
+    return RULE_TEMPLATE.format(
         rule_id=rule_id or "REPLACE_ME", language=language or "Python"
     )
-    if allow_exceptions:
-        return _append_exception_sentence(template, source=Path("template"))
-    return template
 
 
-def _with_exception_sentence(rule: Rule) -> Rule:
-    """The rule with ALLOW_EXCEPTIONS_SENTENCE appended to its agent_prompt."""
-    return replace(rule, content=_append_exception_sentence(rule.content, rule.path))
-
-
-def _append_exception_sentence(content: str, source: Path) -> str:
+def _append_exception_sentence(content: str) -> str:
     """Rule text whose metadata.byolsp.agent_prompt ends with the standard
     exception sentence (SPEC 28.1), creating the metadata path when absent.
+
+    Callers pass already-validated rule YAML, so the parse error path never
+    fires and the source name is a placeholder.
     """
-    data = parse_yaml_mapping(content, source=source)
+    data = parse_yaml_mapping(content, source=Path("<rule>"))
     metadata = data.get("metadata")
     if not isinstance(metadata, CommentedMap):
         metadata = CommentedMap()
