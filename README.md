@@ -73,6 +73,7 @@ also carries an `init:` section whose defaults seed `byor init`'s prompts and
 | Copilot CLI | yes | `postToolUse` | best-effort path | project, global |
 | Cursor | yes | `postToolUse` | edited lines | project, global |
 | OpenCode | yes | `tool.execute.after` plugin | changed file | project, global |
+| Pi | yes | `tool_result` extension | changed file | project, global |
 
 ## Why copies, not symlinks
 

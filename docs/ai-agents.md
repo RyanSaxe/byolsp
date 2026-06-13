@@ -124,7 +124,7 @@ byor hook uninstall --agent AGENT
 ```
 
 `AGENT` is one of `claude-code`, `codex`, `copilot`, `cursor`,
-`opencode`, or `skill`. `--hook-scope` chooses where a real hook registers:
+`opencode`, `pi`, or `skill`. `--hook-scope` chooses where a real hook registers:
 `project` (committed config, with a `command -v byor` guard so teammates
 without byor are unaffected), `global` (under `~/`, personal), or `local`
 (claude-code's `.claude/settings.local.json` only). `byor init` installs the
@@ -160,11 +160,19 @@ init:
 | `copilot` | Real `postToolUse` hook (`.github/hooks/byor.json` or `~/.copilot/hooks/byor.json`) |
 | `cursor` | Real `postToolUse` hook (`.cursor/hooks.json` or `~/.cursor/hooks.json`) |
 | `opencode` | Real `tool.execute.after` plugin `.opencode/plugin/byor.ts` |
+| `pi` | Real `tool_result` extension `.pi/extensions/byor.ts` |
 | `skill` | Rule-capture skill rendered identically into `.agents/skills/byor/SKILL.md` and `.claude/skills/byor/SKILL.md`; installed by `init` by default |
 
-Codex, Copilot, Cursor, and OpenCode auto-discover the `byor` rule-capture
-skill from `.agents/skills/byor/SKILL.md`, so they get the capture loop
-natively.
+Codex, Copilot, Cursor, OpenCode, and Pi auto-discover the `byor` rule-capture
+skill from `.agents/skills/byor/SKILL.md`, so they get the capture loop natively.
+
+**Google Antigravity** also reads skills from `.agents/skills/`, so it gets the
+rule-capture skill with no byor setup (the skill is installed by default).
+byor does not install a post-edit feedback hook for it: Antigravity's hooks are
+an allow/deny/ask gate (`{"decision": ..., "reason": ...}`), not a channel for
+appending diagnostics, so the "let the edit land, then surface diagnostics"
+loop the other harnesses use does not fit. Antigravity users still get terminal
+and editor diagnostics through plain `ast-grep`.
 
 ### skill
 
@@ -232,6 +240,17 @@ agent loop.
 The plugin covers `edit`, `write`, and `apply_patch` calls that name a single
 `filePath`; a multi-file `apply_patch` or a file changed another way (for
 example via a shell command) is not auto-checked.
+
+### pi
+
+Pi supports real post-edit hooks through TypeScript extensions. Install writes
+`.pi/extensions/byor.ts` (project) — Pi also auto-discovers extensions under
+`~/.pi/agent/extensions/` (global). The extension hooks the `tool_result`
+event for the `edit` and `write` tools, runs
+`byor agent-check --scope diff --files <file>` on the touched file, and appends
+any diagnostics to the tool result the model sees. Pi already reads skills from
+`.agents/skills/`, so it discovers the rule-capture skill with no Pi-specific
+work.
 
 ### codex
 

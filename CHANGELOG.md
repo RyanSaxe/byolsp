@@ -26,8 +26,8 @@ share across repositories, and expose to AI coding agents.
   `--scope edit|diff|file` so hooks report only the lines an agent touched.
 - The byor rule-capture skill, rendered for Claude Code, Codex, Copilot, and
   OpenCode, teaching agents to turn durable feedback into ast-grep rules.
-- Post-edit hook adapters for five harnesses (Claude Code, Codex, Copilot,
-  OpenCode, Cursor) at project and global registration scopes.
+- Post-edit hook adapters for six harnesses (Claude Code, Codex, Copilot,
+  Cursor, OpenCode, Pi) at project and global registration scopes.
 - A configurable extra-checks runner that folds ruff/ty/etc. output into the
   same agent feedback channel.
 - Git hook shims (`post-merge`, `post-checkout`) that close the pull-collision

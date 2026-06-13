@@ -1,15 +1,16 @@
-"""AI agent adapters: real post-edit hooks, the OpenCode plugin, and the skill.
+"""AI agent adapters: real post-edit hooks, plugin extensions, and the skill.
 
 Agents are discoverable by their harness (the skill via the cross-agent
-`SKILL.md` standard, diagnostics via the installed post-edit hook), so byor
-writes no instruction files — the hook runs `byor agent-check` automatically and
-the harness surfaces the skill on its own.
+`SKILL.md` standard, diagnostics via the installed post-edit hook or plugin), so
+byor writes no instruction files — the hook runs `byor agent-check`
+automatically and the harness surfaces the skill on its own.
 """
 
 from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from byor.config import load_repo_config, save_repo_config
@@ -26,11 +27,31 @@ from byor.hookconfig import (
 )
 from byor.opencode import OPENCODE_MARKER, OPENCODE_PLUGIN, OPENCODE_PLUGIN_RELPATH
 from byor.paths import resolve_repo_root
+from byor.pi import PI_EXTENSION, PI_EXTENSION_RELPATH, PI_MARKER
 from byor.skill import SKILL_MARKDOWN, SKILL_RELPATHS
 
 # The four real-hook harnesses: a set for membership, a map for Harness lookup.
 HOOK_HARNESSES: frozenset[str] = frozenset(HARNESS_CHOICES)
 HARNESS_BY_NAME: dict[str, Harness] = {harness: harness for harness in HARNESS_CHOICES}
+
+
+@dataclass(frozen=True)
+class PluginAgent:
+    """A harness whose integration is a single byor-managed plugin file."""
+
+    relpath: str
+    content: str
+    marker: str
+
+
+# Harnesses that hook via a TypeScript plugin/extension file rather than a JSON
+# hook config; each is one managed file, written on install and verified by
+# doctor. Both already read the skill from `.agents/skills/`, so neither needs
+# skill-specific work.
+PLUGIN_AGENTS: dict[str, PluginAgent] = {
+    "opencode": PluginAgent(OPENCODE_PLUGIN_RELPATH, OPENCODE_PLUGIN, OPENCODE_MARKER),
+    "pi": PluginAgent(PI_EXTENSION_RELPATH, PI_EXTENSION, PI_MARKER),
+}
 
 AGENT_CHOICES = (
     "claude-code",
@@ -38,6 +59,7 @@ AGENT_CHOICES = (
     "copilot",
     "cursor",
     "opencode",
+    "pi",
     "skill",
 )
 
@@ -94,9 +116,10 @@ def install_agent(
     """Install one agent adapter; returns summary lines for changes made."""
     if agent == "skill":
         return _install_skill(repo_root)
-    if agent == "opencode":
+    plugin = PLUGIN_AGENTS.get(agent)
+    if plugin is not None:
         return _write_managed_file(
-            repo_root, OPENCODE_PLUGIN_RELPATH, OPENCODE_PLUGIN, marker=OPENCODE_MARKER
+            repo_root, plugin.relpath, plugin.content, marker=plugin.marker
         )
     harness = _as_harness(agent)
     if harness is None:
@@ -115,10 +138,9 @@ def uninstall_agent(repo_root: Path, agent: str) -> list[str]:
         for relpath in SKILL_RELPATHS:
             messages.extend(_remove_managed_file(repo_root, relpath))
         return messages
-    if agent == "opencode":
-        return _remove_managed_file(
-            repo_root, OPENCODE_PLUGIN_RELPATH, marker=OPENCODE_MARKER
-        )
+    plugin = PLUGIN_AGENTS.get(agent)
+    if plugin is not None:
+        return _remove_managed_file(repo_root, plugin.relpath, marker=plugin.marker)
     harness = _as_harness(agent)
     if harness is None:
         return []
@@ -131,15 +153,15 @@ def uninstall_agent(repo_root: Path, agent: str) -> list[str]:
 def agent_file_problems(repo_root: Path, agents: Sequence[str]) -> list[str]:
     """Integration problems for doctor's agent_files check.
 
-    The OpenCode plugin is a byor-managed file; the other harnesses' integration
-    is their hook config, verified by checking a byor hook is present in one of
-    its scopes. The skill renders are not checked here — self-heal keeps them
-    current on every byor command, so there is no drift for doctor to report.
+    Plugin files (OpenCode, Pi) are byor-managed; the other harnesses'
+    integration is their hook config, verified by checking a byor hook is present
+    in one of its scopes. The skill renders are not checked here — self-heal keeps
+    them current on every byor command, so there is no drift for doctor to report.
     """
     problems: list[str] = []
     for agent in agents:
-        if agent == "opencode":
-            problems.extend(_opencode_plugin_problems(repo_root))
+        if (plugin := PLUGIN_AGENTS.get(agent)) is not None:
+            problems.extend(_plugin_problems(repo_root, plugin))
         elif (harness := _as_harness(agent)) is not None and not _hook_present(
             repo_root, harness
         ):
@@ -171,17 +193,17 @@ def _install_skill(repo_root: Path) -> list[str]:
     return messages
 
 
-def _opencode_plugin_problems(repo_root: Path) -> list[str]:
-    """Same ownership rules as the skill renders: drifted marker-bearing
-    plugins need a reinstall; unmarked files are user-owned and accepted.
+def _plugin_problems(repo_root: Path, plugin: PluginAgent) -> list[str]:
+    """Same ownership rules as the skill renders: a drifted marker-bearing
+    plugin needs a reinstall; an unmarked file is user-owned and accepted.
     """
     status = marked_text_status(
-        repo_root / OPENCODE_PLUGIN_RELPATH, OPENCODE_PLUGIN, OPENCODE_MARKER
+        repo_root / plugin.relpath, plugin.content, plugin.marker
     )
     if status == "missing":
-        return [f"{OPENCODE_PLUGIN_RELPATH} is missing"]
+        return [f"{plugin.relpath} is missing"]
     if status == "drifted":
-        return [f"{OPENCODE_PLUGIN_RELPATH} is out of date"]
+        return [f"{plugin.relpath} is out of date"]
     return []
 
 
