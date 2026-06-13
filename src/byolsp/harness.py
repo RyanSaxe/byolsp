@@ -58,6 +58,8 @@ def emit(harness: Harness, rendered: str) -> tuple[str, int]:
     nonzero exit (2, its stderr-feedback contract); the others always exit 0
     and carry diagnostics in a JSON envelope on stdout.
     """
+    if not rendered:
+        return "", 0
     return _EMITTERS[harness](rendered)
 
 
@@ -75,19 +77,8 @@ def _parse_claude_code(payload: dict[str, JsonValue]) -> EditPayload:
 
 def _claude_edit_contents(tool_input: dict[str, JsonValue]) -> list[str]:
     """Post-edit strings from a Write/Edit/MultiEdit payload, in any combination."""
-    contents: list[str] = []
-    for key in ("new_string", "content"):
-        value = _string(tool_input.get(key))
-        if value is not None:
-            contents.append(value)
-    edits = tool_input.get("edits")
-    if isinstance(edits, list):
-        for edit in edits:
-            if isinstance(edit, dict):
-                value = _string(edit.get("new_string"))
-                if value is not None:
-                    contents.append(value)
-    return contents
+    direct = _strings(tool_input, ("new_string", "content"))
+    return direct + _new_strings_from_edits(tool_input.get("edits"))
 
 
 def _parse_cursor(payload: dict[str, JsonValue]) -> EditPayload:
@@ -95,14 +86,7 @@ def _parse_cursor(payload: dict[str, JsonValue]) -> EditPayload:
     file_path = _string(payload.get("file_path"))
     if file_path is None:
         return EditPayload()
-    contents: list[str] = []
-    edits = payload.get("edits")
-    if isinstance(edits, list):
-        for edit in edits:
-            if isinstance(edit, dict):
-                value = _string(edit.get("new_string"))
-                if value is not None:
-                    contents.append(value)
+    contents = _new_strings_from_edits(payload.get("edits"))
     return _single_file(Path(file_path), contents)
 
 
@@ -114,11 +98,7 @@ def _parse_copilot(payload: dict[str, JsonValue]) -> EditPayload:
     file_path = _first_string(tool_args, ("filePath", "file_path", "path"))
     if file_path is None:
         return EditPayload()
-    contents: list[str] = []
-    for key in ("newString", "new_string", "content"):
-        value = _string(tool_args.get(key))
-        if value is not None:
-            contents.append(value)
+    contents = _strings(tool_args, ("newString", "new_string", "content"))
     return _single_file(Path(file_path), contents)
 
 
@@ -182,14 +162,12 @@ def _payload_from_patch(added_by_file: dict[str, list[str]]) -> EditPayload:
 
 def _emit_claude_code(rendered: str) -> tuple[str, int]:
     """Diagnostics go to stderr via the hook command's redirect; exit 2 here."""
-    if not rendered:
-        return "", 0
     return rendered, 2
 
 
 def _emit_codex(rendered: str) -> tuple[str, int]:
-    if not rendered:
-        return "", 0
+    # Codex's PostToolUse output schema requires hookEventName alongside
+    # additionalContext, unlike the flat-envelope harnesses below.
     envelope: dict[str, JsonValue] = {
         "hookSpecificOutput": {
             "hookEventName": "PostToolUse",
@@ -200,15 +178,11 @@ def _emit_codex(rendered: str) -> tuple[str, int]:
 
 
 def _emit_copilot(rendered: str) -> tuple[str, int]:
-    if not rendered:
-        return "", 0
     envelope: dict[str, JsonValue] = {"additionalContext": _truncate_to_cap(rendered)}
     return _compact(envelope), 0
 
 
 def _emit_cursor(rendered: str) -> tuple[str, int]:
-    if not rendered:
-        return "", 0
     envelope: dict[str, JsonValue] = {"additional_context": rendered}
     return _compact(envelope), 0
 
@@ -247,12 +221,25 @@ def _string(value: JsonValue) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+def _strings(mapping: dict[str, JsonValue], keys: tuple[str, ...]) -> list[str]:
+    """Every non-empty string value across `keys`, in key order."""
+    return [value for key in keys if (value := _string(mapping.get(key))) is not None]
+
+
 def _first_string(mapping: dict[str, JsonValue], keys: tuple[str, ...]) -> str | None:
-    for key in keys:
-        value = _string(mapping.get(key))
-        if value is not None:
-            return value
-    return None
+    return next(iter(_strings(mapping, keys)), None)
+
+
+def _new_strings_from_edits(edits: JsonValue) -> list[str]:
+    """The `new_string` of each dict in an `edits[]` list; empty otherwise."""
+    if not isinstance(edits, list):
+        return []
+    return [
+        value
+        for edit in edits
+        if isinstance(edit, dict)
+        and (value := _string(edit.get("new_string"))) is not None
+    ]
 
 
 _Parser = Callable[[dict[str, JsonValue]], EditPayload]
