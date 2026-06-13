@@ -142,6 +142,22 @@ under `~/.config/byolsp/rules/` — never a generated copy under
 `No changes to 'RULE_ID'` and exits 0. The post-action is the same as `add`:
 validate, sync (fan out for global scope), report doctor problems.
 
+## Removing rules
+
+```bash
+byolsp remove RULE_ID [--scope project|local|global|auto]
+```
+
+Deletes the rule file. Scope resolution is identical to `edit`: `auto` (the
+default) resolves project, then local, then canonical global, and the global
+scope always deletes the canonical file under `~/.config/byolsp/rules/` —
+never just a generated copy. The post-action is the same as `add` and `edit`:
+sync (global scope fans out to every registered repo, removing the generated
+copies) and `doctor --quick`.
+
+Removing a project or local rule that shadowed a global rule by ID lets the
+global copy return on that same sync.
+
 ## Promotion
 
 ```bash

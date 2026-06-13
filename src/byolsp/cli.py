@@ -19,6 +19,7 @@ COMMANDS = {
     "doctor": "Validate installation health",
     "add": "Create a new rule in a scope",
     "edit": "Open an existing rule in $EDITOR",
+    "remove": "Delete a rule from its scope",
     "promote": "Move a personal rule into shared project rules",
     "exclude": "Disable a global rule in this repository",
     "include": "Re-enable a previously excluded global rule",
@@ -51,8 +52,8 @@ def build_parser() -> argparse.ArgumentParser:
             _add_list_arguments(command)
         if name == "add":
             _add_add_arguments(command)
-        if name == "edit":
-            _add_edit_arguments(command)
+        if name in ("edit", "remove"):
+            _add_rule_lookup_arguments(command, action=name)
         if name == "promote":
             _add_promote_arguments(command)
         if name in ("exclude", "include"):
@@ -175,9 +176,12 @@ def _add_add_arguments(command: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_edit_arguments(command: argparse.ArgumentParser) -> None:
+def _add_rule_lookup_arguments(command: argparse.ArgumentParser, action: str) -> None:
+    """edit and remove share their signature: RULE_ID plus scope resolution."""
     _add_repo_argument(command)
-    command.add_argument("rule_id", metavar="RULE_ID", help="ID of the rule to edit")
+    command.add_argument(
+        "rule_id", metavar="RULE_ID", help=f"ID of the rule to {action}"
+    )
     command.add_argument(
         "--scope",
         choices=("project", "local", "global", "auto"),
@@ -302,6 +306,10 @@ def run(args: argparse.Namespace) -> int:
         from byolsp.rule_commands import run_edit
 
         return run_edit(args)
+    if args.command == "remove":
+        from byolsp.rule_commands import run_remove
+
+        return run_remove(args)
     if args.command == "promote":
         from byolsp.rule_commands import run_promote
 

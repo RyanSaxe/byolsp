@@ -74,6 +74,7 @@ byolsp sync           Mirror enabled global rules into the repository
 byolsp doctor         Validate installation health
 byolsp add            Create a new rule in a scope
 byolsp edit           Open an existing rule in $EDITOR
+byolsp remove         Delete a rule from its scope
 byolsp promote        Move a personal rule into shared project rules
 byolsp exclude        Disable a global rule in this repository
 byolsp include        Re-enable a previously excluded global rule

@@ -149,6 +149,18 @@ def run_edit(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_remove(args: argparse.Namespace) -> int:
+    context = repo_context(args)
+    scope, rule = _find_rule(context, args.rule_id, args.scope)
+    rule.path.unlink()
+    print(
+        f"Removed {scope} rule '{rule.id}' "
+        f"at {display_path(rule.path, context.repo_root)}"
+    )
+    _finish(context, fan_out=scope == "global")
+    return 0
+
+
 def run_promote(args: argparse.Namespace) -> int:
     context = repo_context(args)
     source_scope: RuleScope = args.from_scope
