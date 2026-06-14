@@ -3,7 +3,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from support import make_repo, write_rule
+from support import make_repo, repo_with_agents, write_rule
 
 from byor.cli import main
 from byor.commands.doctor import collect_checks
@@ -215,7 +215,7 @@ def test_doctor_flags_registered_repos_whose_path_is_gone(
 def test_doctor_flags_a_missing_opencode_plugin(
     home: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    repo = make_repo(home, "repo", "--agents", "opencode")
+    repo = repo_with_agents(home, "opencode")
     (home / ".config" / "opencode" / "plugin" / "byor.ts").unlink()
     capsys.readouterr()
 

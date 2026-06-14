@@ -71,7 +71,7 @@ def collect_checks(repo_root: Path, config_dir: Path, quick: bool) -> list[Check
     if not quick and repo_check.ok:
         checks.extend(_rule_checks(repo_root, repo_config.paths, config_dir))
     checks.append(_registry_check(config_dir, global_config))
-    checks.append(_agent_files_check(repo_root, repo_config))
+    checks.append(_agent_files_check(global_config))
     extra = _extra_checks_check(repo_root, repo_config, global_config)
     if extra is not None:
         checks.append(extra)
@@ -224,16 +224,16 @@ def _extra_checks_check(
     return Check("extra_checks", True, f"checks: {listed}")
 
 
-def _agent_files_check(repo_root: Path, repo_config: RepoConfig) -> Check:
-    """Each agent in ai.agents needs its managed files (skill renders, plugin)."""
-    if not repo_config.agents:
+def _agent_files_check(global_config: GlobalConfig) -> Check:
+    """Each globally-registered agent needs its managed files (skill, hook, plugin)."""
+    if not global_config.agents:
         return Check("agent_files", True, "no AI agents configured")
-    problems = agent_file_problems(repo_config.agents)
+    problems = agent_file_problems(global_config.agents)
     if problems:
         return Check(
             "agent_files",
             False,
-            f"{'; '.join(problems)}; run `byor hook install`",
+            f"{'; '.join(problems)}; run `byor install`",
         )
-    agents = ", ".join(repo_config.agents)
+    agents = ", ".join(global_config.agents)
     return Check("agent_files", True, f"agent integrations installed for: {agents}")

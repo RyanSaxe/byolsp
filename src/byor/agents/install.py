@@ -21,9 +21,9 @@ from byor.agents.opencode import (
     OPENCODE_PLUGIN_RELPATH,
 )
 from byor.agents.pi import PI_EXTENSION, PI_EXTENSION_RELPATH, PI_MARKER
-from byor.config import load_repo_config, save_repo_config
+from byor.config import load_global_config, save_global_config
 from byor.io.fsio import MANAGED_MARKER, marked_text_status, write_marked_text
-from byor.io.paths import resolve_repo_root
+from byor.io.paths import global_config_dir
 from byor.rules.skill import SKILL_MARKDOWN, global_skill_paths
 
 # The four real-hook harnesses: a set for membership, a map for Harness lookup.
@@ -67,13 +67,13 @@ HARNESS_MANUAL_STEPS: dict[Harness, str] = {
 
 
 def run_hook(args: argparse.Namespace) -> int:
-    """`byor hook install|uninstall --agent NAME`.
+    """`byor hook install|uninstall --agent NAME` — global, no repo needed.
 
-    Installed agents are recorded in ai.agents so doctor and uninstall know
-    about them.
+    The agent is recorded in the global config's ai.agents so doctor and
+    uninstall know about it.
     """
-    repo_root = resolve_repo_root(explicit=args.repo)
-    config = load_repo_config(repo_root)
+    config_dir = global_config_dir()
+    config = load_global_config(config_dir)
     if args.hook_action == "install":
         messages = install_agent(args.agent)
         recorded = args.agent not in config.agents
@@ -85,7 +85,7 @@ def run_hook(args: argparse.Namespace) -> int:
         if recorded:
             config.agents.remove(args.agent)
     if recorded:
-        save_repo_config(repo_root, config)
+        save_global_config(config_dir, config)
     for message in messages:
         print(message)
     return 0

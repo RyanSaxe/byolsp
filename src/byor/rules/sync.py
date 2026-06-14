@@ -23,6 +23,7 @@ from byor.io.paths import global_config_dir, resolve_repo_root
 from byor.rules.rules import Rule, check_id_conflicts, discover_rule_files, load_rules
 from byor.rules.skill import SKILL_MARKDOWN, global_skill_paths
 from byor.scaffold.ignore import write_rule_visibility_file
+from byor.scaffold.sgconfig import ensure_home_sgconfig
 
 STALE_EXIT_CODE = 3
 
@@ -146,15 +147,30 @@ def repo_is_stale(repo_root: Path, canonical: CanonicalRules) -> bool:
     return mirror_contents(mirror_dir) != plan.desired
 
 
+def heal_global(config_dir: Path) -> None:
+    """Keep machine-level state current with the installed byor, silently.
+
+    Runs on every command (even outside a repo): refreshes the global skill
+    render so a byor upgrade is reflected without a reinstall, and reconverges
+    `~/sgconfig.yml` whenever global rules exist so ast-grep keeps applying them
+    everywhere.
+    """
+    config = load_global_config(config_dir)
+    rules_dir = global_rules_dir(config_dir, config)
+    if rules_dir.is_dir():
+        ensure_home_sgconfig(rules_dir)
+    if "skill" in config.agents:
+        refresh_skill_renders()
+
+
 def heal_repo(repo_root: Path, config_dir: Path) -> str | None:
-    """The self-heal preamble: sync rules and skill renders, one line when changed.
+    """The repo self-heal preamble: sync the rule mirror, one line when changed.
 
     Uninitialized repositories are skipped silently: the command being run
     will fail with its own clearer RepoNotInitialized error.
     """
     if not repo_config_path(repo_root).is_file():
         return None
-    refresh_skill_renders()
     _, result = sync_repo(repo_root, load_canonical_rules(config_dir))
     if not result.changed:
         return None
