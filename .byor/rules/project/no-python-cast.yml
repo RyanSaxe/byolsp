@@ -1,0 +1,11 @@
+id: no-python-cast
+language: python
+severity: warning
+message: Avoid typing.cast in Python code.
+rule:
+  pattern: cast($TYPE, $VALUE)
+metadata:
+  byor:
+    agent_prompt: >
+      Do not use typing.cast here. Fix the type by narrowing, changing the
+      signature, introducing a protocol, or restructuring the value flow.
