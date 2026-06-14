@@ -26,18 +26,27 @@ rule:
 ## Install
 
 ```bash
-uvx byor init
+uv tool install byor    # once per machine (or `uvx byor` to try without installing)
+byor install            # once: register the skill + your AI agents' post-edit hooks
+byor init               # in a repo: set up project rules
 ```
 
-byor needs only Python 3.11+ (run it with [uv](https://docs.astral.sh/uv/):
-`uvx byor`). **ast-grep ships with byor** — the install carries it, so there is
-nothing else to set up. To pin a specific ast-grep build, put `ast-grep` on
-`PATH` or point `$BYOR_AST_GREP` at it and byor prefers that over the bundled
-one.
+byor needs only Python 3.11+ (install it with [uv](https://docs.astral.sh/uv/)).
+A `uv tool install` is a user-global tool, not a repo dependency, so it never
+touches the repo and works in any language's project. **ast-grep ships with
+byor** — the install carries it, so there is nothing else to set up. To pin a
+specific ast-grep build, put `ast-grep` on `PATH` or point `$BYOR_AST_GREP` at
+it and byor prefers that over the bundled one.
 
-`init` writes `sgconfig.yml`, the `.byor/` rule directories, and a git ignore
-block. After that `ast-grep scan` and `ast-grep lsp` work directly, with no
-byor in the loop.
+`byor install` is a one-time, machine-level step: it registers the rule-capture
+skill and a post-edit hook for each AI agent you use, and writes a global
+ast-grep config (`~/sgconfig.yml`) so your personal rules apply in **every**
+repo — even ones byor was never `init`'d in. If you already keep a
+`~/sgconfig.yml`, byor appends to it without disturbing your own entries.
+
+`byor init` then sets up a repository: it writes `sgconfig.yml`, the `.byor/`
+rule directories, and a git ignore block. After that `ast-grep scan` and
+`ast-grep lsp` work directly, with no byor in the loop.
 
 ## In your terminal and editor
 
@@ -89,12 +98,17 @@ told the moment they break one.
   The skill also knows when a linter, type checker, or formatter is the better
   tool and offers to set that up instead.
 
+`byor install` registers these for the agents you pick; to add or remove one
+later, use `byor hook` — registration is global (one per machine), so neither
+needs a repo:
+
 ```bash
-byor hook install --agent claude-code            # register a real post-edit hook
-byor hook install --agent codex --hook-scope global
+byor install --agents claude-code,codex   # register the skill + these hooks
+byor hook install --agent cursor           # add one more, anytime
 ```
 
-byor supports six harnesses, at both project and global registration scope:
+byor supports six harnesses; the skill, hook, and plugin all install to each
+harness's global location, so they fire in every repo:
 
 | Harness | Skill | Real hook | Diagnostic precision |
 | --- | --- | --- | --- |
@@ -145,6 +159,7 @@ fresh clone needs no byor.
 ## Commands
 
 ```text
+byor install        Register byor's AI integrations globally (one-time)
 byor init           Initialize byor in a repository
 byor sync           Mirror enabled global rules into the repository
 byor doctor         Validate installation health
